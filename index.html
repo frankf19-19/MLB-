@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLB 每日預測</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --field:#0c1a2b; --panel:#14283d; --panel-2:#1a3149;
+    --line:rgba(226,236,232,.14); --chalk:#eef4f1; --muted:#8299ac;
+    --amber:#ffc247; --teal:#4ecac1; --hit:#46c46a; --miss:#ef5f5f; --grow:#7ec96f;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --cond:'Barlow Condensed',sans-serif; --body:'Noto Sans TC',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #163150 0%, transparent 60%), var(--field);
+    color:var(--chalk); font-family:var(--body); line-height:1.6; min-height:100vh;
+    padding:clamp(16px,4vw,40px) clamp(14px,4vw,28px) 60px;
+  }
+  .wrap{max-width:940px;margin:0 auto}
+  header{
+    border:1px solid var(--line); border-radius:14px;
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));
+    padding:clamp(18px,4vw,30px); position:relative; overflow:hidden;
+  }
+  header::before{content:"";position:absolute;inset:0;opacity:.5;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:10px 10px}
+  .eyebrow{font-family:var(--cond);letter-spacing:.22em;text-transform:uppercase;
+    font-size:14px;color:var(--muted);font-weight:600}
+  h1{font-family:var(--cond);font-weight:700;letter-spacing:.02em;
+    font-size:clamp(30px,7vw,52px);line-height:1;margin:2px 0 16px;cursor:pointer}
+  h1 .ball{color:var(--amber)}
+
+  .datebar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;margin-bottom:14px}
+  .nav{font-family:var(--mono);font-weight:600;font-size:18px;color:var(--chalk);
+    background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:9px;
+    width:40px;height:40px;cursor:pointer;transition:background .12s}
+  .nav:hover{background:rgba(255,255,255,.13)}
+  input[type=date]{
+    font-family:var(--mono);font-weight:600;font-size:16px;color:var(--chalk);
+    background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:9px;
+    padding:8px 12px;color-scheme:dark;cursor:pointer}
+  .today-btn{font-family:var(--cond);font-weight:600;letter-spacing:.06em;font-size:14px;
+    color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px;
+    padding:7px 14px;cursor:pointer}
+  .today-btn:hover{color:var(--chalk)}
+  .btn{
+    margin-left:auto;
+    font-family:var(--cond);font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    font-size:16px;color:var(--field);background:var(--amber);border:none;border-radius:999px;
+    padding:11px 22px;cursor:pointer;display:inline-flex;align-items:center;gap:9px;
+    box-shadow:0 4px 18px rgba(255,194,71,.28);transition:transform .12s,box-shadow .12s}
+  .btn:hover{transform:translateY(-1px)} .btn:disabled{opacity:.6;cursor:default;box-shadow:none}
+  .btn.spin .ico{animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* 搜尋 */
+  .searchbar{display:flex;gap:8px;position:relative;margin-bottom:14px}
+  .searchbar input[type=text]{
+    flex:1;font-family:var(--body);font-size:15px;color:var(--chalk);
+    background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:999px;
+    padding:10px 18px;outline:none}
+  .searchbar input[type=text]::placeholder{color:var(--muted)}
+  .searchbar input[type=text]:focus{border-color:var(--teal)}
+  .search-results{margin-top:10px}
+  .sr-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border:1px solid var(--line);
+    border-radius:9px;background:var(--panel);margin-bottom:6px;cursor:pointer}
+  .sr-item:hover{background:var(--panel-2)}
+  .sr-item .pos{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:30px}
+  .sr-item .tm{margin-left:auto;font-size:12.5px;color:var(--teal)}
+
+  .score-row{display:flex;flex-wrap:wrap;gap:clamp(18px,5vw,44px);align-items:flex-end;position:relative}
+  .stat .num{font-family:var(--mono);font-weight:600;color:var(--amber);
+    font-size:clamp(30px,8vw,50px);line-height:.9;text-shadow:0 0 22px rgba(255,194,71,.28)}
+  .stat .num.small{color:var(--chalk);text-shadow:none;font-size:clamp(22px,5vw,34px)}
+  .stat .lbl{font-family:var(--cond);letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);font-size:13px;margin-top:6px;font-weight:600}
+  .status{margin-left:auto;font-family:var(--mono);font-size:12.5px;color:var(--muted);
+    text-align:right;min-height:16px;align-self:flex-end}
+  .status.err{color:var(--miss)}
+
+  section{margin-top:clamp(26px,6vw,40px)}
+  .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .sec-head h2{font-family:var(--cond);font-weight:700;letter-spacing:.04em;
+    font-size:clamp(20px,5vw,26px);text-transform:uppercase}
+  .sec-head .tag{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .sec-head .back{margin-left:auto;font-family:var(--cond);font-weight:600;font-size:14px;
+    color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px;
+    padding:6px 14px;cursor:pointer}
+  .sec-head .back:hover{color:var(--chalk)}
+
+  /* 頭條 */
+  .headline{border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;
+    background:var(--panel);padding:12px 16px;margin-bottom:8px;font-size:14.5px;color:#dde7e1}
+  .headline .hk{font-family:var(--cond);font-weight:700;letter-spacing:.1em;font-size:12px;
+    text-transform:uppercase;color:var(--amber);margin-right:8px}
+
+  .game{border:1px solid var(--line);border-radius:10px;background:var(--panel);
+    padding:14px clamp(14px,3vw,18px);margin-bottom:12px}
+  .game.done{background:linear-gradient(90deg,var(--panel),var(--panel-2))}
+  .g-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .teams{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 220px}
+  .team{display:flex;align-items:center;gap:8px}
+  .team .nm{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    cursor:pointer;border-bottom:1px dashed transparent}
+  .team .nm:hover{color:var(--teal);border-bottom-color:var(--teal)}
+  .team .sc{font-family:var(--mono);font-weight:600;margin-left:auto;font-size:18px;color:var(--muted)}
+  .team.win .nm{color:var(--chalk)} .team.win .sc{color:var(--amber)}
+  .team .sc.pred{color:var(--teal)}
+  .pill{font-family:var(--cond);font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    font-size:12px;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .pill.hit{background:rgba(70,196,106,.16);color:var(--hit);border:1px solid rgba(70,196,106,.4)}
+  .pill.miss{background:rgba(239,95,95,.14);color:var(--miss);border:1px solid rgba(239,95,95,.4)}
+  .pill.wait{background:rgba(130,153,172,.14);color:var(--muted);border:1px solid var(--line)}
+  .meta{color:var(--muted);font-size:12.5px;font-family:var(--mono);margin-top:2px}
+  .scorepred b{color:var(--teal);font-family:var(--mono)}
+  .prob{margin-top:12px}
+  .prob-bar{height:8px;border-radius:5px;overflow:hidden;background:rgba(255,255,255,.08);display:flex}
+  .prob-bar .away{background:var(--teal);opacity:.55} .prob-bar .home{background:var(--teal)}
+  .prob-lbl{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:6px}
+  .prob-lbl b{color:var(--chalk);font-weight:600} .pick{color:var(--amber)}
+  .why,.review{border-top:1px dashed var(--line);margin-top:12px;padding-top:10px;
+    font-size:13.5px;color:#c8d5cf;line-height:1.65}
+  .why .k,.review .k{font-family:var(--cond);font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;font-size:12px;margin-right:8px}
+  .why .k{color:var(--teal)}
+  .review.good .k{color:var(--hit)} .review.bad .k{color:var(--miss)}
+
+  /* 球員卡 */
+  .pos-group{font-family:var(--cond);font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    font-size:15px;color:var(--muted);margin:20px 0 10px}
+  .player{border:1px solid var(--line);border-radius:10px;background:var(--panel);
+    padding:12px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start}
+  .avatar{width:56px;height:56px;border-radius:50%;flex:0 0 56px;object-fit:cover;
+    background:var(--panel-2);border:1px solid var(--line)}
+  .avatar.ph{display:flex;align-items:center;justify-content:center;
+    font-family:var(--cond);font-weight:700;font-size:18px;color:var(--muted)}
+  .p-body{min-width:0;flex:1}
+  .sr-ava{width:34px;height:34px;border-radius:50%;flex:0 0 34px;object-fit:cover;
+    background:var(--panel-2);border:1px solid var(--line)}
+  .p-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .p-top .pnm{font-weight:700;font-size:15.5px}
+  .p-top .pmeta{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .badge{font-family:var(--cond);font-weight:700;letter-spacing:.06em;font-size:12px;
+    padding:2px 9px;border-radius:999px}
+  .badge.star{background:rgba(255,194,71,.15);color:var(--amber);border:1px solid rgba(255,194,71,.45)}
+  .badge.pot{background:rgba(126,201,111,.13);color:var(--grow);border:1px solid rgba(126,201,111,.4)}
+  .p-stats{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:4px}
+  .p-sw{font-size:13px;line-height:1.6;margin-top:6px}
+  .p-sw .sk{color:var(--teal);font-weight:700;margin-right:6px}
+  .p-sw .wk{color:var(--miss);font-weight:700;margin:0 6px 0 12px}
+  .empty{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:22px;text-align:center;font-size:14.5px}
+  footer{margin-top:38px;color:var(--muted);font-size:12.5px;font-family:var(--mono);text-align:center;line-height:1.7}
+  .hidden{display:none}
+  @media (prefers-reduced-motion:no-preference){
+    .game,.player,.headline{animation:rise .4s ease both}
+    @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Daily Baseball Model · 點隊名看名單 · 可搜尋球員</div>
+    <h1 id="homeLink">MLB<span class="ball"> ⚾ </span>預測計分板</h1>
+
+    <div class="searchbar">
+      <input type="text" id="searchBox" placeholder="搜尋球員(輸入英文姓名,例如 Ohtani、Judge…)">
+    </div>
+    <div class="search-results" id="searchResults"></div>
+
+    <div class="datebar" id="datebar">
+      <button class="nav" id="prevBtn" title="前一天">◀</button>
+      <input type="date" id="datePick">
+      <button class="nav" id="nextBtn" title="後一天">▶</button>
+      <button class="today-btn" id="todayBtn">今天</button>
+      <button class="btn" id="loadBtn"><span class="ico">⟳</span><span>載入</span></button>
+    </div>
+    <div class="score-row" id="statRow">
+      <div class="stat"><div class="num" id="dayPct">—</div><div class="lbl">當日命中率</div></div>
+      <div class="stat"><div class="num small" id="dayRec">—</div><div class="lbl">命中 / 已完賽</div></div>
+      <div class="stat"><div class="num small" id="dayErr">—</div><div class="lbl">平均分差誤差</div></div>
+      <div class="status" id="status"></div>
+    </div>
+  </header>
+
+  <div id="homeView">
+    <section id="headlineSec" class="hidden">
+      <div class="sec-head"><h2>今日頭條</h2><span class="tag" id="hlTag"></span></div>
+      <div id="headlines"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2 id="listTitle">比賽</h2><span class="tag" id="listTag"></span></div>
+      <div id="games"><div class="empty">載入中…</div></div>
+    </section>
+  </div>
+
+  <div id="teamView" class="hidden">
+    <section>
+      <div class="sec-head"><h2 id="teamTitle">球隊</h2><span class="tag" id="teamTag"></span>
+        <button class="back" id="backBtn">← 回比賽</button></div>
+      <div id="roster"><div class="empty">載入中…</div></div>
+    </section>
+  </div>
+
+  <footer>模型:兩隊得失分 × 打線 OPS 混合估火力 → 預期比分(含主場 +0.2 分),再依先發 ERA(上限 ±0.8)與牛棚 ERA(上限 ±0.5)修正。戰績與先發數據回看時取「該日之前」;打線 OPS 與牛棚為本季累計,回看較早日期時此兩項略有事後之明,僅供參考。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。</footer>
+</div>
+
+<script>
+const API='https://statsapi.mlb.com/api/v1';
+const HOME_RUN_BOOST=0.20, RUN_SIGMA=4.3, HOME_EDGE=0.035;
+const $=id=>document.getElementById(id);
+const esc=s=>(s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const r1=x=>Math.round(x*10)/10;
+async function jget(url){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+function erf(x){const s=x<0?-1:1;x=Math.abs(x);const t=1/(1+0.3275911*x);
+  const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);return s*y;}
+const normCdf=z=>0.5*(1+erf(z/Math.SQRT2));
+const log5=(pa,pb)=>{const d=pa+pb-2*pa*pb;return d===0?0.5:(pa-pa*pb)/d;};
+function etToday(){return new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'})).toISOString().slice(0,10);}
+function shiftDate(ds,n){const d=new Date(ds+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+function taipeiTime(iso){try{return new Date(iso).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return null;}}
+
+/* ---------- 資料抓取 ---------- */
+async function fetchStandingsAsOf(date){
+  const season=+date.slice(0,4);
+  const d=await jget(`${API}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason&date=${date}`);
+  const m={};
+  (d.records||[]).forEach(rec=>(rec.teamRecords||[]).forEach(t=>{
+    const w=t.wins||0,l=t.losses||0,gp=t.gamesPlayed||(w+l)||0;
+    m[t.team.id]={name:t.team.name,pct:(w+l)?w/(w+l):0.5,w,l,gp,
+      rs:t.runsScored!=null?+t.runsScored:null,ra:t.runsAllowed!=null?+t.runsAllowed:null};}));
+  return m;
+}
+async function fetchGames(date){
+  const d=await jget(`${API}/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team,linescore`);
+  const out=[];
+  (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(g=>{
+    const h=g.teams.home,a=g.teams.away;
+    out.push({id:g.gamePk,status:g.status?.abstractGameState||'',detail:g.status?.detailedState||'',
+      away:a.team.name,home:h.team.name,awayId:a.team.id,homeId:h.team.id,
+      awayScore:a.score,homeScore:h.score,awayWin:a.isWinner,homeWin:h.isWinner,
+      awayPit:a.probablePitcher?.fullName,homePit:h.probablePitcher?.fullName,
+      awayPitId:a.probablePitcher?.id,homePitId:h.probablePitcher?.id,
+      startTpe:taipeiTime(g.gameDate)});
+  }));
+  return out;
+}
+
+/* 先發投手數據(取「該日期之前」的累計,回測不偷看未來) */
+async function fetchPitcherStats(ids,season,endDate){
+  const out={}; if(!ids.length)return out;
+  const parse=d=>{(d.people||[]).forEach(p=>{
+    const sp=(p.stats||[]).find(s=>s.group?.displayName==='pitching')?.splits||[];
+    if(!sp.length)return; const st=sp[sp.length-1].stat||{};
+    const era=parseFloat(st.era), ip=parseFloat(st.inningsPitched);
+    if(isFinite(era)&&isFinite(ip))out[p.id]={era,ip};});};
+  try{
+    parse(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${season}-01-01,endDate=${endDate},season=${season})`));
+  }catch(e){}
+  const missing=ids.filter(i=>!out[i]);
+  if(missing.length){
+    try{parse(await jget(`${API}/people?personIds=${missing.join(',')}&hydrate=stats(group=[pitching],type=[season],season=${season})`));}catch(e){}
+  }
+  return out;
+}
+
+/* 全隊打線 OPS + 牛棚(救援群)ERA:各一次呼叫抓全聯盟 */
+async function fetchTeamExtras(season){
+  const ex={map:{},lgOPS:null,lgBpEra:null};
+  try{
+    const d=await jget(`${API}/teams/stats?sportId=1&group=hitting&stats=season&season=${season}`);
+    const sp=(d.stats||[])[0]?.splits||[];
+    sp.forEach(s=>{const id=s.team?.id,ops=parseFloat(s.stat?.ops);
+      if(id&&isFinite(ops)){(ex.map[id]=ex.map[id]||{}).ops=ops;}});
+    const v=Object.values(ex.map).map(t=>t.ops).filter(isFinite);
+    if(v.length)ex.lgOPS=v.reduce((a,b)=>a+b,0)/v.length;
+  }catch(e){}
+  try{
+    const d=await jget(`${API}/teams/stats?sportId=1&group=pitching&stats=statSplits&sitCodes=rp&season=${season}`);
+    const sp=(d.stats||[])[0]?.splits||[];
+    sp.forEach(s=>{const id=s.team?.id,era=parseFloat(s.stat?.era),ip=parseFloat(s.stat?.inningsPitched);
+      if(id&&isFinite(era)&&isFinite(ip)&&ip>=30){(ex.map[id]=ex.map[id]||{}).bpEra=era;(ex.map[id]).bpIp=ip;}});
+    const v=Object.values(ex.map).map(t=>t.bpEra).filter(isFinite);
+    if(v.length)ex.lgBpEra=v.reduce((a,b)=>a+b,0)/v.length;
+  }catch(e){}
+  return ex;
+}
+
+/* ---------- 預測模型 ---------- */
+function leagueRPG(pm){const v=Object.values(pm).filter(t=>t.rs!=null&&t.gp);
+  return v.length?v.reduce((s,t)=>s+t.rs/t.gp,0)/v.length:null;}
+function predict(g,pm,lg,ps,ex){
+  const H=pm[g.homeId]||{},A=pm[g.awayId]||{};
+  const ok=lg&&H.rs!=null&&H.ra!=null&&H.gp&&A.rs!=null&&A.ra!=null&&A.gp;
+  if(!ok){
+    const hp=Math.max(.05,Math.min(.95,log5(H.pct??.5,A.pct??.5)+HOME_EDGE));
+    return {home_prob:hp,away_prob:1-hp,predicted_winner:hp>=.5?g.home:g.away,
+      why:`資料不足(球季初或查無得失分),改以兩隊勝率(主 ${(H.pct??.5).toFixed(3)} vs 客 ${(A.pct??.5).toFixed(3)})加主場優勢估計。`};
+  }
+  const hRS=H.rs/H.gp,hRA=H.ra/H.gp,aRS=A.rs/A.gp,aRA=A.ra/A.gp;
+
+  // 打線品質:得分(65%)與 OPS 推估得分(35%)混合,矯正串聯運氣
+  const exm=ex?.map||{}, lgOPS=ex?.lgOPS;
+  const blendOff=(rsPg,ops)=>{
+    if(!(lgOPS&&isFinite(ops)))return {v:rsPg,used:false};
+    const opsRuns=lg*Math.pow(ops/lgOPS,1.8);
+    return {v:0.65*rsPg+0.35*opsRuns,used:true};
+  };
+  const hOff=blendOff(hRS,exm[g.homeId]?.ops), aOff=blendOff(aRS,exm[g.awayId]?.ops);
+
+  let expHome=(hOff.v/lg)*(aRA/lg)*lg+HOME_RUN_BOOST, expAway=(aOff.v/lg)*(hRA/lg)*lg;
+
+  // 先發投手修正(ERA 相對聯盟;樣本收縮;×0.5 防重複計算;上限 ±0.8)
+  const lgERA=lg*0.92;
+  const stAdj=st=>{
+    if(!st||!(st.ip>=10))return null;
+    const w=st.ip/(st.ip+40);
+    let d=(st.era-lgERA)/9*5.8*w*0.5;
+    return Math.max(-0.8,Math.min(0.8,d));
+  };
+  const hSt=ps?ps[g.homePitId]:null, aSt=ps?ps[g.awayPitId]:null;
+  const dHome=stAdj(hSt), dAway=stAdj(aSt);
+  if(dHome!=null)expAway+=dHome;
+  if(dAway!=null)expHome+=dAway;
+  let pitTxt='';
+  if(hSt||aSt){
+    const seg=[];
+    if(aSt&&g.awayPit)seg.push(`${g.awayPit}(ERA ${aSt.era.toFixed(2)})`);
+    if(hSt&&g.homePit)seg.push(`${g.homePit}(ERA ${hSt.era.toFixed(2)})`);
+    pitTxt=`先發 ${seg.join(' vs ')}`;
+    if(dHome!=null&&dAway!=null){
+      const edge=(dAway-dHome);
+      if(Math.abs(edge)>=0.25)pitTxt+=`,投手優勢在${edge<0?g.away:g.home}(修正約 ${r1(Math.abs(edge))} 分)`;
+      else pitTxt+=`,兩位先發水準接近`;
+    }else pitTxt+=`(僅一方有足夠樣本,只做單邊修正)`;
+    pitTxt+='。';
+  }else{
+    pitTxt='先發未定或樣本不足,本場未做投手修正。';
+  }
+
+  // 牛棚修正:救援群 ERA 相對聯盟,約承擔 1/3 局數;×0.6 防重複;上限 ±0.5
+  const lgBp=ex?.lgBpEra;
+  const bpAdj=t=>{
+    const bp=exm[t]?.bpEra;
+    if(!(lgBp&&isFinite(bp)))return null;
+    let d=(bp-lgBp)/9*3.2*0.6;
+    return Math.max(-0.5,Math.min(0.5,d));
+  };
+  const bpH=bpAdj(g.homeId), bpA=bpAdj(g.awayId);
+  if(bpH!=null)expAway+=bpH;
+  if(bpA!=null)expHome+=bpA;
+  let bpTxt='';
+  if(bpH!=null&&bpA!=null){
+    const eH=exm[g.homeId].bpEra,eA=exm[g.awayId].bpEra,edge=bpA-bpH;
+    bpTxt= Math.abs(edge)>=0.15
+      ? `牛棚較穩的是${edge<0?g.away:g.home}(ERA ${eA.toFixed(2)} vs ${eH.toFixed(2)},客vs主,修正約 ${r1(Math.abs(edge))} 分)。`
+      : `兩隊牛棚水準接近(ERA ${eA.toFixed(2)} vs ${eH.toFixed(2)})。`;
+  }else bpTxt='牛棚數據暫缺,本場未做牛棚修正。';
+
+  const margin=expHome-expAway;
+  const hp=Math.max(.05,Math.min(.95,normCdf(margin/RUN_SIGMA)));
+  let hs=Math.round(expHome),as=Math.round(expAway);
+  if(margin>=0&&hs<=as)hs=as+1; if(margin<0&&as<=hs)as=hs+1;
+  const fav=margin>=0?g.home:g.away;
+  let why=`主隊場均得 ${r1(hRS)} 失 ${r1(hRA)},客隊場均得 ${r1(aRS)} 失 ${r1(aRA)}(聯盟平均 ${r1(lg)})。`;
+  if(hOff.used&&aOff.used){
+    const ho=exm[g.homeId].ops,ao=exm[g.awayId].ops;
+    why+=`打線 OPS 主 ${ho.toFixed(3)}、客 ${ao.toFixed(3)}(聯盟 ${lgOPS.toFixed(3)}),已與得分混合估火力。`;
+  }
+  why+=pitTxt+bpTxt;
+  why+=`含主場 +0.2 分,修正後得分期望 ${r1(expAway)}:${r1(expHome)}(客:主),預期 ${fav} 贏約 ${r1(Math.abs(margin))} 分。`;
+  if(Math.abs(margin)<0.8) why+=`分差不到 1 分,實質接近五五波。`;
+  return {home_prob:hp,away_prob:1-hp,predicted_winner:fav,home_score_pred:hs,away_score_pred:as,
+    margin:Math.abs(margin),raw_margin:margin,why,
+    pitAdjusted:(dHome!=null||dAway!=null),bpAdjusted:(bpH!=null&&bpA!=null)};
+}
+function review(g,p){
+  const actual=g.homeWin?g.home:(g.awayWin?g.away:null); if(!actual)return null;
+  const hit=actual===p.predicted_winner;
+  const actMargin=(g.homeScore??0)-(g.awayScore??0);
+  const favProb=Math.round(Math.max(p.home_prob,p.away_prob)*100);
+  let t;
+  if(hit){
+    t=`方向正確:預測 ${p.predicted_winner} 勝(勝率 ${favProb}%),實際 ${g.awayScore}:${g.homeScore} 由 ${actual} 拿下。`;
+    if(p.raw_margin!=null){
+      const err=Math.abs(actMargin-p.raw_margin);
+      if(err<=1.5)t+=`實際分差與預期(${r1(p.margin)} 分)相當接近,這場模型讀得準。`;
+      else if(Math.abs(actMargin)>Math.abs(p.raw_margin))t+=`不過實際贏 ${Math.abs(actMargin)} 分,比預期的 ${r1(p.margin)} 分大——${p.pitAdjusted&&p.bpAdjusted?'即使已計入先發與牛棚,':''}當日手感或串聯攻勢把差距放大了。`;
+      else t+=`但實際只贏 ${Math.abs(actMargin)} 分,比預期的 ${r1(p.margin)} 分驚險。`;
+    }
+  }else{
+    t=`未命中:預測 ${p.predicted_winner}(勝率 ${favProb}%),實際由 ${actual} 以 ${g.awayScore}:${g.homeScore} 拿下。`;
+    t+= favProb>=65? `這算爆冷——模型把握較高仍翻船${p.pitAdjusted?'(先發、打線與牛棚均已計入,可能是當日手感、關鍵失誤或傷兵等因素)':',值得查先發投手或傷兵等模型沒看到的因素'}。`
+      : `原本就接近五五波(把握僅 ${favProb}%),輸掉屬正常波動。`;
+  }
+  return {hit,actual,actMargin,text:t,favProb};
+}
+
+/* ---------- 首頁渲染 ---------- */
+let curGames=[],curPreds=[];
+function teamLink(id,name){return `<span class="nm" data-team="${id}">${esc(name)}</span>`;}
+function gameCard(g,p,rv){
+  const hp=Math.round(p.home_prob*100),ap=100-hp;
+  const hasScore=p.home_score_pred!=null, isFinal=g.status==='Final';
+  const homeWin=rv&&rv.actual===g.home;
+  const meta=[g.startTpe?('台灣時間 '+g.startTpe):null,
+    (g.awayPit||g.homePit)?(esc(g.awayPit||'未定')+' vs '+esc(g.homePit||'未定')):null,
+    (!isFinal&&g.detail&&g.detail!=='Scheduled')?g.detail:null].filter(Boolean).join(' · ');
+  const pill=isFinal?(rv?`<span class="pill ${rv.hit?'hit':'miss'}">${rv.hit?'命中':'未中'}</span>`:'')
+    :`<span class="pill wait">未開打 / 進行中</span>`;
+  const sc=isFinal?[`<span class="sc">${g.awayScore??''}</span>`,`<span class="sc">${g.homeScore??''}</span>`]
+    :hasScore?[`<span class="sc pred">${p.away_score_pred}</span>`,`<span class="sc pred">${p.home_score_pred}</span>`]:['',''];
+  const predLine=hasScore
+    ?`<div class="meta scorepred">模型預期比分 ${p.away_score_pred}–${p.home_score_pred}(客–主) · 預期分差 <b>${r1(p.margin)}</b> 分 · 預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`
+    :`<div class="meta scorepred">預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`;
+  return `<div class="game ${isFinal?'done':''}">
+    <div class="g-top"><div class="teams">
+      <div class="team ${isFinal&&!homeWin?'win':''}">${teamLink(g.awayId,g.away)}${sc[0]}</div>
+      <div class="team ${isFinal&&homeWin?'win':''}">${teamLink(g.homeId,g.home)}${sc[1]}</div>
+    </div>${pill}</div>
+    ${meta?`<div class="meta">${meta}</div>`:''}
+    ${predLine}
+    <div class="prob"><div class="prob-bar"><div class="away" style="width:${ap}%"></div><div class="home" style="width:${hp}%"></div></div>
+      <div class="prob-lbl"><span>客 <b>${ap}%</b></span><span><b>${hp}%</b> 主</span></div></div>
+    <div class="why"><span class="k">預測理由</span>${esc(p.why)}</div>
+    ${rv?`<div class="review ${rv.hit?'good':'bad'}"><span class="k">${rv.hit?'賽後檢討 ✓':'賽後檢討 ✗'}</span>${esc(rv.text)}</div>`:''}
+  </div>`;
+}
+
+function buildHeadlines(date,games,preds,reviews){
+  const items=[];
+  // 爆冷
+  const upsets=reviews.filter(r=>r&&!r.hit&&r.favProb>=63).sort((a,b)=>b.favProb-a.favProb);
+  if(upsets[0]){const u=upsets[0];items.push({k:'爆冷',t:`${u.actual} 擊敗模型勝率 ${u.favProb}% 看好的一方(${u.g.away} ${u.g.awayScore}:${u.g.homeScore} ${u.g.home})。`});}
+  // 最大分差
+  const finals=games.filter(g=>g.status==='Final'&&g.homeScore!=null);
+  if(finals.length){
+    const blow=[...finals].sort((a,b)=>Math.abs((b.homeScore-b.awayScore))-Math.abs((a.homeScore-a.awayScore)))[0];
+    const m=Math.abs(blow.homeScore-blow.awayScore);
+    if(m>=6)items.push({k:'大勝',t:`${blow.homeScore>blow.awayScore?blow.home:blow.away} 以 ${blow.awayScore}:${blow.homeScore} 大勝 ${m} 分。`});
+    const hi=[...finals].sort((a,b)=>(b.homeScore+b.awayScore)-(a.homeScore+a.awayScore))[0];
+    if(hi.homeScore+hi.awayScore>=15)items.push({k:'火力',t:`${hi.away} 對 ${hi.home} 合計轟出 ${hi.homeScore+hi.awayScore} 分(${hi.awayScore}:${hi.homeScore})。`});
+  }
+  // 今日焦點(未完賽)
+  const upcoming=preds.filter((p,i)=>games[i].status!=='Final'&&p.margin!=null);
+  if(upcoming.length){
+    const top=[...upcoming].sort((a,b)=>b.margin-a.margin)[0];
+    items.push({k:'今日最看好',t:`${top.predicted_winner}(勝率 ${Math.round(Math.max(top.home_prob,top.away_prob)*100)}%、預期贏 ${r1(top.margin)} 分)。`});
+    const close=[...upcoming].sort((a,b)=>a.margin-b.margin)[0];
+    if(close!==top)items.push({k:'五五波',t:`最難預測的一戰:預期分差僅 ${r1(close.margin)} 分,勝負難料。`});
+  }
+  return items;
+}
+
+async function loadDay(){
+  const date=$('datePick').value; if(!date)return;
+  showView('home');
+  const btn=$('loadBtn');btn.disabled=true;btn.classList.add('spin');
+  const st=$('status');st.className='status';st.textContent='載入 '+date+' …';
+  try{
+    const asOf=shiftDate(date,-1);
+    const season=+date.slice(0,4);
+    const [pm,games,ex]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season)]);
+    const lg=leagueRPG(pm);
+    const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
+    const ps=await fetchPitcherStats(pitIds,season,asOf);
+    let hits=0,finals=0,errSum=0,errN=0,html='';
+    const reviews=[];curGames=games;curPreds=[];
+    games.forEach(g=>{
+      const p=predict(g,pm,lg,ps,ex);curPreds.push(p);
+      const rv=g.status==='Final'?review(g,p):null;
+      if(rv){rv.g=g;finals++;if(rv.hit)hits++;
+        if(p.raw_margin!=null){errSum+=Math.abs(rv.actMargin-p.raw_margin);errN++;}}
+      reviews.push(rv);html+=gameCard(g,p,rv);
+    });
+    $('games').innerHTML=html||`<div class="empty">${date} 沒有排定的比賽(可能是明星賽或休兵日)。</div>`;
+    $('listTitle').textContent=date+' 比賽';
+    $('listTag').textContent=games.length?games.length+' 場':'';
+    $('dayPct').textContent=finals?((hits/finals*100).toFixed(1)+'%'):'—';
+    $('dayRec').textContent=finals?(hits+' / '+finals):'0 / 0';
+    $('dayErr').textContent=errN?(r1(errSum/errN)+' 分'):'—';
+    // 頭條
+    const hl=buildHeadlines(date,games,curPreds,reviews);
+    $('headlineSec').classList.toggle('hidden',!hl.length);
+    $('headlines').innerHTML=hl.map(h=>`<div class="headline"><span class="hk">${esc(h.k)}</span>${esc(h.t)}</div>`).join('');
+    $('hlTag').textContent='由當日數據自動生成';
+    st.textContent=finals?`完成 · ${finals} 場已完賽已比對`:'完成 · 該日尚無完賽結果';
+    bindTeamClicks();
+  }catch(e){st.className='status err';st.textContent='載入失敗:'+e.message;
+    $('games').innerHTML=`<div class="empty">讀取不到資料,請確認網路後再試。</div>`;}
+  finally{btn.disabled=false;btn.classList.remove('spin');}
+}
+
+/* ---------- 球員數據 → 標記與強弱項 ---------- */
+function getStat(person,group){
+  const arr=(person.stats||[]).find(s=>s.group?.displayName===group)?.splits||[];
+  return arr.length?arr[arr.length-1].stat:null;
+}
+function evalHitter(st,age){
+  if(!st)return null;
+  const pa=+st.plateAppearances||0;
+  const avg=+st.avg||0,obp=+st.obp||0,slg=+st.slg||0,ops=+st.ops||(obp+slg);
+  const hr=+st.homeRuns||0,sb=+st.stolenBases||0,so=+st.strikeOuts||0;
+  const kRate=pa? so/pa : 0;
+  const S=[],W=[];
+  if(avg>=.300)S.push(`打擊精準(AVG ${st.avg})`);
+  if(slg>=.500)S.push(`長打火力(SLG ${st.slg}、${hr} 轟)`); else if(hr>=15)S.push(`全壘打產能(${hr} 轟)`);
+  if(obp-avg>=.070)S.push(`選球出色(OBP ${st.obp})`);
+  if(sb>=15)S.push(`速度威脅(${sb} 盜)`);
+  if(kRate>=.28&&pa>=80)W.push(`三振偏多(K 率 ${(kRate*100).toFixed(0)}%)`);
+  if(avg<.230&&pa>=80)W.push(`打擊率偏低(${st.avg})`);
+  if(slg<.360&&pa>=80)W.push(`缺乏長打(SLG ${st.slg})`);
+  if(!S.length&&pa>=80)S.push(`攻擊指數 OPS ${(ops).toFixed(3)}`);
+  const star=pa>=100&&ops>=.850, pot=age!=null&&age<=25&&pa>=60&&ops>=.740;
+  const line=`AVG ${st.avg||'-'} / OBP ${st.obp||'-'} / SLG ${st.slg||'-'} · ${hr} HR · ${st.rbi||0} RBI · ${sb} SB · ${pa} PA`;
+  return {S,W,star,pot,line,small:pa<80};
+}
+function evalPitcher(st,age){
+  if(!st)return null;
+  const ipStr=st.inningsPitched||'0'; const ip=parseFloat(ipStr)||0;
+  const era=+st.era||99,whip=+st.whip||9;
+  const k9=ip?(+st.strikeOuts||0)*9/ip:0, bb9=ip?(+st.baseOnBalls||0)*9/ip:0, hr9=ip?(+st.homeRuns||0)*9/ip:0;
+  const sv=+st.saves||0;
+  const S=[],W=[];
+  if(era<=3.20&&ip>=30)S.push(`壓制力強(ERA ${st.era})`);
+  if(k9>=9.5&&ip>=20)S.push(`三振能力(K/9 ${k9.toFixed(1)})`);
+  if(bb9<=2.2&&ip>=20)S.push(`控球精準(BB/9 ${bb9.toFixed(1)})`);
+  if(whip<=1.10&&ip>=30)S.push(`壓制上壘(WHIP ${st.whip})`);
+  if(sv>=10)S.push(`守護神(${sv} 次救援)`);
+  if(bb9>=4.0&&ip>=20)W.push(`控球不穩(BB/9 ${bb9.toFixed(1)})`);
+  if(hr9>=1.5&&ip>=20)W.push(`易被開轟(HR/9 ${hr9.toFixed(1)})`);
+  if(era>=5.0&&ip>=30)W.push(`防禦率偏高(${st.era})`);
+  if(!S.length&&ip>=20)S.push(`ERA ${st.era}、WHIP ${st.whip}`);
+  const star=(ip>=40&&era<=3.30)||sv>=15, pot=age!=null&&age<=25&&ip>=20&&era<=4.20;
+  const line=`ERA ${st.era||'-'} · WHIP ${st.whip||'-'} · ${ip} IP · K/9 ${k9.toFixed(1)} · BB/9 ${bb9.toFixed(1)}${sv?` · ${sv} SV`:''}`;
+  return {S,W,star,pot,line,small:ip<20};
+}
+function headshot(pid,size){
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/w_${size||120},q_auto:best/v1/people/${pid}/headshot/67/current`;
+}
+function initials(name){return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
+function avatarImg(pid,name,cls){
+  return `<img class="${cls}" src="${headshot(pid,cls==='sr-ava'?68:120)}" alt="" loading="lazy"
+    onerror="this.outerHTML='<div class=&quot;${cls} avatar ph&quot;>${esc(initials(name))}</div>'">`;
+}
+function playerCard(entry){
+  const p=entry.person||{}, pos=entry.position?.abbreviation||p.primaryPosition?.abbreviation||'?';
+  const age=p.currentAge;
+  const isP=pos==='P'||pos==='SP'||pos==='RP'||pos==='TWP';
+  const hit=evalHitter(getStat(p,'hitting'),age);
+  const pit=evalPitcher(getStat(p,'pitching'),age);
+  const ev=isP?(pit||hit):(hit||pit);
+  const badges=[];
+  if(ev?.star)badges.push('<span class="badge star">⭐ 主力</span>');
+  else if(ev?.pot)badges.push('<span class="badge pot">🌱 潛力</span>');
+  let sw='';
+  if(ev){
+    sw='<div class="p-sw">';
+    if(ev.S.length)sw+=`<span class="sk">強項</span>${esc(ev.S.join(';'))}`;
+    if(ev.W.length)sw+=`<span class="wk">弱項</span>${esc(ev.W.join(';'))}`;
+    if(!ev.S.length&&!ev.W.length)sw+=`<span style="color:var(--muted)">樣本不足,暫不評述</span>`;
+    if(ev.small)sw+=`<span style="color:var(--muted)">(樣本較小,僅供參考)</span>`;
+    sw+='</div>';
+  }
+  return `<div class="player">
+    ${avatarImg(p.id,p.fullName,'avatar')}
+    <div class="p-body">
+    <div class="p-top"><span class="pnm">${esc(p.fullName||'?')}</span>
+      <span class="pmeta">#${esc(entry.jerseyNumber||'-')} · ${esc(pos)}${age?` · ${age} 歲`:''}</span>${badges.join('')}</div>
+    ${ev?`<div class="p-stats">${esc(ev.line)}</div>`:'<div class="p-stats">本季暫無數據</div>'}
+    ${sw}
+    </div>
+  </div>`;
+}
+
+/* ---------- 球隊名單頁 ---------- */
+async function showTeam(teamId,teamName){
+  showView('team');
+  $('teamTitle').textContent=teamName||'球隊名單';
+  $('teamTag').textContent='現役名單(即時)';
+  $('roster').innerHTML='<div class="empty">載入名單與本季數據中…</div>';
+  try{
+    const season=+etToday().slice(0,4);
+    const d=await jget(`${API}/teams/${teamId}/roster?rosterType=active&hydrate=person(stats(group=[hitting,pitching],type=[season],season=${season}))`);
+    const roster=d.roster||[];
+    if(!roster.length){$('roster').innerHTML='<div class="empty">查無名單。</div>';return;}
+    const groups={'投手':[],'捕手':[],'內野手':[],'外野手':[],'其他':[]};
+    roster.forEach(e=>{
+      const t=e.position?.type||'';
+      const key=t==='Pitcher'?'投手':t==='Catcher'?'捕手':t==='Infielder'?'內野手':t==='Outfielder'?'外野手':'其他';
+      groups[key].push(e);
+    });
+    // 主力排前面
+    const rank=e=>{const p=e.person||{},pos=e.position?.abbreviation||'';
+      const isP=e.position?.type==='Pitcher';
+      const ev=isP?evalPitcher(getStat(p,'pitching'),p.currentAge):evalHitter(getStat(p,'hitting'),p.currentAge);
+      return ev?(ev.star?0:ev.pot?1:2):3;};
+    let html='';
+    for(const[k,list]of Object.entries(groups)){
+      if(!list.length)continue;
+      list.sort((a,b)=>rank(a)-rank(b));
+      html+=`<div class="pos-group">${k}(${list.length})</div>`+list.map(playerCard).join('');
+    }
+    $('roster').innerHTML=html;
+  }catch(e){$('roster').innerHTML=`<div class="empty">名單載入失敗:${esc(e.message)}</div>`;}
+}
+function bindTeamClicks(){
+  document.querySelectorAll('#games .nm[data-team]').forEach(el=>{
+    el.addEventListener('click',()=>showTeam(+el.dataset.team,el.textContent));});
+}
+
+/* ---------- 球員搜尋 ---------- */
+let allPlayers=null,teamsById={};
+async function ensurePlayers(){
+  if(allPlayers)return;
+  const season=+etToday().slice(0,4);
+  const [pl,tm]=await Promise.all([
+    jget(`${API}/sports/1/players?season=${season}&fields=people,id,fullName,primaryPosition,abbreviation,currentTeam,id`),
+    jget(`${API}/teams?sportId=1&fields=teams,id,name`)
+  ]);
+  allPlayers=pl.people||[];
+  (tm.teams||[]).forEach(t=>teamsById[t.id]=t.name);
+}
+let searchTimer=null;
+$('searchBox').addEventListener('input',()=>{
+  clearTimeout(searchTimer);
+  const q=$('searchBox').value.trim().toLowerCase();
+  if(q.length<2){$('searchResults').innerHTML='';return;}
+  searchTimer=setTimeout(async()=>{
+    try{
+      $('searchResults').innerHTML='<div class="empty">搜尋中…</div>';
+      await ensurePlayers();
+      const hits=allPlayers.filter(p=>(p.fullName||'').toLowerCase().includes(q)).slice(0,8);
+      $('searchResults').innerHTML=hits.length?hits.map(p=>{
+        const tid=p.currentTeam?.id, tn=tid?teamsById[tid]||'':'';
+        return `<div class="sr-item" data-pid="${p.id}" data-tid="${tid||''}">
+          ${avatarImg(p.id,p.fullName,'sr-ava')}
+          <span class="pos">${esc(p.primaryPosition?.abbreviation||'?')}</span>
+          <span>${esc(p.fullName)}</span><span class="tm">${esc(tn)}</span></div>`;
+      }).join(''):'<div class="empty">找不到符合的球員(請用英文姓名搜尋)。</div>';
+      document.querySelectorAll('.sr-item').forEach(el=>el.addEventListener('click',()=>openPlayer(+el.dataset.pid)));
+    }catch(e){$('searchResults').innerHTML=`<div class="empty">搜尋失敗:${esc(e.message)}</div>`;}
+  },300);
+});
+async function openPlayer(pid){
+  $('searchResults').innerHTML='<div class="empty">載入球員資料…</div>';
+  try{
+    const season=+etToday().slice(0,4);
+    const d=await jget(`${API}/people?personIds=${pid}&hydrate=stats(group=[hitting,pitching],type=[season],season=${season}),currentTeam`);
+    const p=(d.people||[])[0];if(!p)throw new Error('查無資料');
+    const entry={person:p,position:p.primaryPosition?{abbreviation:p.primaryPosition.abbreviation,type:p.primaryPosition.type}:null,jerseyNumber:p.primaryNumber};
+    const tn=p.currentTeam?.name||'';
+    $('searchResults').innerHTML=
+      (tn?`<div class="meta" style="margin-bottom:6px">效力球隊:<span class="nm" style="cursor:pointer;color:var(--teal)" id="srTeam">${esc(tn)}</span></div>`:'')
+      +playerCard(entry);
+    const st=$('srTeam');if(st&&p.currentTeam?.id)st.addEventListener('click',()=>showTeam(p.currentTeam.id,tn));
+  }catch(e){$('searchResults').innerHTML=`<div class="empty">載入失敗:${esc(e.message)}</div>`;}
+}
+
+/* ---------- 視圖切換 ---------- */
+function showView(v){
+  $('homeView').classList.toggle('hidden',v!=='home');
+  $('teamView').classList.toggle('hidden',v!=='team');
+}
+$('backBtn').addEventListener('click',()=>showView('home'));
+$('homeLink').addEventListener('click',()=>showView('home'));
+
+const dp=$('datePick');dp.value=etToday();
+$('loadBtn').addEventListener('click',loadDay);
+$('prevBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,-1);loadDay();});
+$('nextBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,1);loadDay();});
+$('todayBtn').addEventListener('click',()=>{dp.value=etToday();loadDay();});
+dp.addEventListener('change',loadDay);
+loadDay();
+</script>
+</body>
+</html>
