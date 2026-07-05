@@ -271,7 +271,7 @@
 
   <div id="homeView">
     <section id="aiSec" class="hidden">
-      <div class="sec-head"><h2>AI 每日分析</h2><span class="tag" id="aiTag"></span></div>
+      <div class="sec-head"><h2>每日總評</h2><span class="tag">由當日數據自動生成 · 免金鑰</span></div>
       <div class="analysis" id="aiText"></div>
     </section>
     <section id="headlineSec" class="hidden">
@@ -595,19 +595,38 @@ function buildHeadlines(date,games,preds,reviews){
 }
 
 let refreshTimer=null;
-async function loadAiAnalysis(date){
-  try{
-    const r=await fetch('analysis.json?_='+Date.now());
-    if(!r.ok)throw 0;
-    const d=await r.json();
-    if(d&&d.analysis&&d.date_et===date){
-      $('aiText').textContent=d.analysis;
-      $('aiTag').textContent=`Claude 生成 · ${d.generated_at_taipei||''}(台灣時間)`;
-      $('aiSec').classList.remove('hidden');
-      return;
+function buildDailySummary(date,games,preds,reviews,acc){
+  const parts=[];
+  // 昨日/當日模型表現
+  const done=reviews.filter(Boolean);
+  if(done.length){
+    parts.push(`這一天已完賽 ${done.length} 場,模型命中 ${acc.hits} 場(${(acc.hits/done.length*100).toFixed(0)}%),平均分差誤差 ${acc.errN?r1(acc.errSum/acc.errN)+' 分':'—'}。`);
+    const upsets=done.filter(r=>!r.hit&&r.favProb>=63).sort((a,b)=>b.favProb-a.favProb);
+    if(upsets.length){
+      const u=upsets[0];
+      parts.push(`最大的意外是 ${u.actual} 擊敗了模型給 ${u.favProb}% 把握的一方(${u.g.away} ${u.g.awayScore}:${u.g.homeScore} ${u.g.home}),提醒我們棒球沒有穩贏這回事。`);
+    }else if(done.length>=4&&acc.hits/done.length>=0.7){
+      parts.push(`沒有出現真正的爆冷,強隊大多按劇本走,這種日子模型看起來特別聰明——別被騙了,長期五五到六成才是常態。`);
     }
-  }catch(e){}
-  $('aiSec').classList.add('hidden');
+  }
+  // 今日焦點(未完賽)
+  const up=[];
+  games.forEach((g,i)=>{if(g.status!=='Final'&&preds[i]&&preds[i].margin!=null)up.push({g,p:preds[i]});});
+  if(up.length){
+    const top=[...up].sort((a,b)=>b.p.margin-a.p.margin)[0];
+    let s=`接下來的比賽中,模型最看好 ${top.p.predicted_winner}(勝率 ${Math.round(Math.max(top.p.home_prob,top.p.away_prob)*100)}%、預期贏 ${r1(top.p.margin)} 分`;
+    if(top.g.awayPit&&top.g.homePit)s+=`,先發 ${top.g.awayPit} 對 ${top.g.homePit}`;
+    s+=`)。`;
+    parts.push(s);
+    const close=[...up].sort((a,b)=>a.p.margin-b.p.margin)[0];
+    if(close!==top)parts.push(`最難押的一戰是 ${close.g.away} 作客 ${close.g.home},預期分差只有 ${r1(close.p.margin)} 分,實質五五波,看先發當天的手感。`);
+    const strong=up.filter(x=>Math.max(x.p.home_prob,x.p.away_prob)>=0.62).length;
+    if(up.length>=6)parts.push(`全日 ${up.length} 場待打,其中 ${strong} 場模型給出六成以上把握,其餘都在伯仲之間。`);
+  }else if(!done.length){
+    parts.push(`${date} 沒有排定的比賽。`);
+  }
+  parts.push(`以上由兩隊得失分、打線 OPS、先發與牛棚 ERA 計算而成,單場變異大,僅供追蹤參考。`);
+  return parts.join('');
 }
 
 async function loadDay(quiet){
@@ -657,7 +676,9 @@ async function loadDay(quiet){
     st.textContent=(finals?`完成 · ${finals} 場已完賽已比對`:'完成 · 該日尚無完賽結果')
       +(refreshTimer?' · 🔴 每 45 秒自動更新':'');
     bindTeamClicks();
-    loadAiAnalysis(date);
+    const summary=buildDailySummary(date,games,curPreds,reviews,{hits,errSum,errN});
+    $('aiText').textContent=summary;
+    $('aiSec').classList.toggle('hidden',!summary);
   }catch(e){st.className='status err';st.textContent='載入失敗:'+e.message;
     if(!quiet)$('games').innerHTML=`<div class="empty">讀取不到資料,請確認網路後再試。</div>`;}
   finally{if(!quiet){btn.disabled=false;btn.classList.remove('spin');}}
