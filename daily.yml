@@ -1,0 +1,35 @@
+name: MLB 每日 AI 分析
+
+on:
+  schedule:
+    # 13:00 UTC = 台灣 21:00 = 美東早上,昨日已全部完賽、今日先發已公布
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}   # 允許手動觸發
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安裝相依
+        run: pip install tzdata
+      - name: 產生 AI 分析
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: claude-sonnet-4-6
+        run: python update.py
+      - name: Commit analysis.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add analysis.json
+          if git diff --staged --quiet; then echo "無變更"; else
+            git commit -m "chore: 每日 AI 分析 ($(date -u +%Y-%m-%d))"
+            git push
+          fi
