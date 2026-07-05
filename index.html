@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MLB 每日預測</title>
+<title>MLB 預測計分板</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22%2314283d%22/%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22none%22%20stroke%3D%22%234ecac1%22%20stroke-opacity%3D%22.35%22%20stroke-width%3D%222%22/%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2223%22%20fill%3D%22%23eef4f1%22/%3E%3Cpath%20d%3D%22M15%2017%20Q26%2032%2015%2047%22%20fill%3D%22none%22%20stroke%3D%22%23e05b5b%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M49%2017%20Q38%2032%2049%2047%22%20fill%3D%22none%22%20stroke%3D%22%23e05b5b%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22/%3E%3Cg%20stroke%3D%22%23e05b5b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M17%2022%20l4%20-1.5%20M19.5%2027%20l4.5%20-1%20M20.5%2032%20l4.5%200%20M19.5%2037%20l4.5%201%20M17%2042%20l4%201.5%22/%3E%3Cpath%20d%3D%22M47%2022%20l-4%20-1.5%20M44.5%2027%20l-4.5%20-1%20M43.5%2032%20l-4.5%200%20M44.5%2037%20l-4.5%201%20M47%2042%20l-4%201.5%22/%3E%3C/g%3E%3Cpolyline%20points%3D%2222%2C41%2029%2C33%2034%2C36%2043%2C24%22%20fill%3D%22none%22%20stroke%3D%22%230c1a2b%22%20stroke-width%3D%224.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3Cpolyline%20points%3D%2222%2C41%2029%2C33%2034%2C36%2043%2C24%22%20fill%3D%22none%22%20stroke%3D%22%232aa79e%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3Ccircle%20cx%3D%2243%22%20cy%3D%2224%22%20r%3D%223.4%22%20fill%3D%22%23ffc247%22/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -32,7 +34,10 @@
   .eyebrow{font-family:var(--cond);letter-spacing:.22em;text-transform:uppercase;
     font-size:14px;color:var(--muted);font-weight:600}
   h1{font-family:var(--cond);font-weight:700;letter-spacing:.02em;
-    font-size:clamp(30px,7vw,52px);line-height:1;margin:2px 0 16px;cursor:pointer}
+    font-size:clamp(30px,7vw,52px);line-height:1;margin:2px 0 16px;cursor:pointer;
+    display:flex;align-items:center;gap:14px}
+  .sitelogo{width:clamp(40px,9vw,56px);height:clamp(40px,9vw,56px);flex:0 0 auto;
+    filter:drop-shadow(0 3px 10px rgba(78,202,193,.25))}
   h1 .ball{color:var(--amber)}
 
   .datebar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;margin-bottom:14px}
@@ -247,7 +252,7 @@
 <div class="wrap">
   <header>
     <div class="eyebrow">Daily Baseball Model · 點隊名看名單 · 可搜尋球員</div>
-    <h1 id="homeLink">MLB<span class="ball"> ⚾ </span>預測計分板</h1>
+    <h1 id="homeLink"><svg class="sitelogo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#14283d"/><circle cx="32" cy="32" r="30" fill="none" stroke="#4ecac1" stroke-opacity=".35" stroke-width="2"/><circle cx="32" cy="32" r="23" fill="#eef4f1"/><path d="M15 17 Q26 32 15 47" fill="none" stroke="#e05b5b" stroke-width="2.6" stroke-linecap="round"/><path d="M49 17 Q38 32 49 47" fill="none" stroke="#e05b5b" stroke-width="2.6" stroke-linecap="round"/><g stroke="#e05b5b" stroke-width="1.8" stroke-linecap="round"><path d="M17 22 l4 -1.5 M19.5 27 l4.5 -1 M20.5 32 l4.5 0 M19.5 37 l4.5 1 M17 42 l4 1.5"/><path d="M47 22 l-4 -1.5 M44.5 27 l-4.5 -1 M43.5 32 l-4.5 0 M44.5 37 l-4.5 1 M47 42 l-4 1.5"/></g><polyline points="22,41 29,33 34,36 43,24" fill="none" stroke="#0c1a2b" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/><polyline points="22,41 29,33 34,36 43,24" fill="none" stroke="#2aa79e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="43" cy="24" r="3.4" fill="#ffc247"/></svg><span>MLB 預測計分板</span></h1>
 
     <div class="searchbar">
       <input type="text" id="searchBox" placeholder="搜尋球員(輸入英文姓名,例如 Ohtani、Judge…)">
