@@ -264,6 +264,7 @@
       <input type="date" id="datePick">
       <button class="nav" id="nextBtn" title="後一天">▶</button>
       <button class="today-btn" id="todayBtn">今天</button>
+      <button class="today-btn" id="calibBtn">模型體檢</button>
       <button class="btn" id="loadBtn"><span class="ico">⟳</span><span>載入</span></button>
     </div>
     <div class="score-row" id="statRow">
@@ -275,6 +276,22 @@
   </header>
 
   <div id="homeView">
+    <section id="calibSec" class="hidden">
+      <div class="sec-head"><h2>模型體檢(校準)</h2><span class="tag">用過去實戰檢驗信心是否誠實</span></div>
+      <div class="analysis" style="border-left-color:var(--teal)">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          回測範圍:
+          <select id="calibDays" style="font-family:var(--mono);background:rgba(255,255,255,.07);color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:6px 10px">
+            <option value="7">近 7 天</option>
+            <option value="14" selected>近 14 天</option>
+            <option value="30">近 30 天</option>
+          </select>
+          <button class="today-btn" id="calibRun" style="color:var(--teal);border-color:rgba(78,202,193,.5)">開始體檢</button>
+          <span class="tag" id="calibProg"></span>
+        </div>
+        <div id="calibOut" style="font-size:14px">按「開始體檢」,會逐日重算過去的預測並跟實際結果比對:檢查模型說 60% 時是否真的中六成、預期分差誤差多大,並自動找出最誠實的勝率換算參數(σ)。跑 14 天約需 10~20 秒。</div>
+      </div>
+    </section>
     <section id="aiSec" class="hidden">
       <div class="sec-head"><h2>每日總評</h2><span class="tag">由當日數據自動生成 · 免金鑰</span></div>
       <div class="analysis" id="aiText"></div>
@@ -318,7 +335,8 @@
 
 <script>
 const API='https://statsapi.mlb.com/api/v1';
-const HOME_RUN_BOOST=0.20, RUN_SIGMA=4.3, HOME_EDGE=0.035;
+const HOME_RUN_BOOST=0.20, HOME_EDGE=0.035;
+let RUN_SIGMA=parseFloat(localStorage.getItem('mlb_sigma'))||4.3;
 const $=id=>document.getElementById(id);
 const esc=s=>(s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const r1=x=>Math.round(x*10)/10;
@@ -1102,6 +1120,111 @@ $('pdBackBtn').addEventListener('click',()=>{
 });
 $('gdBackBtn').addEventListener('click',()=>showView('home'));
 $('homeLink').addEventListener('click',()=>showView('home'));
+
+/* ---------- 模型體檢:回測校準 ---------- */
+$('calibBtn').addEventListener('click',()=>{
+  showView('home');
+  $('calibSec').classList.toggle('hidden');
+  if(!$('calibSec').classList.contains('hidden'))$('calibSec').scrollIntoView({behavior:'smooth'});
+});
+let calibRunning=false;
+$('calibRun').addEventListener('click',async()=>{
+  if(calibRunning)return;calibRunning=true;
+  const days=+$('calibDays').value;
+  const prog=$('calibProg'),out=$('calibOut');
+  out.innerHTML='';prog.textContent='準備中…';
+  try{
+    const season=+etToday().slice(0,4);
+    const ex=await fetchTeamExtras(season);
+    const samples=[];let skipped=0;
+    for(let i=1;i<=days;i++){
+      const date=shiftDate(etToday(),-i), asOf=shiftDate(date,-1);
+      prog.textContent=`回測中 ${i}/${days} 天…(已收 ${samples.length} 場)`;
+      try{
+        const [pm,games]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date)]);
+        const lg=leagueRPG(pm);
+        const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
+        const ps=await fetchPitcherStats(pitIds,season,asOf);
+        games.forEach(g=>{
+          if(g.status!=='Final')return;
+          const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)return;
+          const p=predict(g,pm,lg,ps,ex);
+          if(p.raw_margin==null){skipped++;return;}
+          samples.push({m:p.raw_margin,homeWon,actM:(g.homeScore??0)-(g.awayScore??0)});
+        });
+      }catch(e){/* 單日失敗跳過 */}
+    }
+    prog.textContent='';
+    if(samples.length<30){
+      out.innerHTML=`<span style="color:var(--miss)">樣本只有 ${samples.length} 場,不足以校準(至少需要約 30 場)。請改跑更長天數,或等球季累積。</span>`;
+      calibRunning=false;return;
+    }
+    // 以候選 σ 計算 Brier 分數(越低越誠實)
+    const brier=s=>samples.reduce((sum,x)=>{
+      const p=Math.max(.05,Math.min(.95,normCdf(x.m/s)));
+      return sum+Math.pow(p-(x.homeWon?1:0),2);},0)/samples.length;
+    let best=RUN_SIGMA,bestB=brier(RUN_SIGMA);
+    for(let s=3.0;s<=6.75;s+=0.25){const b=brier(s);if(b<bestB-1e-9){bestB=b;best=s;}}
+    // 阻尼:小樣本回測有噪音,每次只往建議方向修正一半,避免過度反應
+    if(Math.abs(best-RUN_SIGMA)>0.01){
+      best=Math.round((RUN_SIGMA+(best-RUN_SIGMA)*0.5)*4)/4;
+      bestB=brier(best);
+    }
+    const curB=brier(RUN_SIGMA);
+    // 信心分桶(用目前 σ)
+    const buckets=[[.50,.55],[.55,.60],[.60,.65],[.65,.75],[.75,1.01]];
+    const rows=buckets.map(([lo,hi])=>{
+      const grp=samples.map(x=>{
+        const hp=Math.max(.05,Math.min(.95,normCdf(x.m/RUN_SIGMA)));
+        const favHome=hp>=.5, conf=favHome?hp:1-hp, favWon=favHome?x.homeWon:!x.homeWon;
+        return {conf,favWon};
+      }).filter(x=>x.conf>=lo&&x.conf<hi);
+      if(!grp.length)return null;
+      const act=grp.filter(x=>x.favWon).length/grp.length;
+      const avg=grp.reduce((s,x)=>s+x.conf,0)/grp.length;
+      const diff=act-avg;
+      const col=Math.abs(diff)<=.04?'var(--hit)':Math.abs(diff)<=.08?'var(--amber)':'var(--miss)';
+      return `<tr><td>${(lo*100).toFixed(0)}–${(hi*100>100?100:hi*100).toFixed(0)}%</td>
+        <td>${grp.length}</td><td>${(avg*100).toFixed(1)}%</td>
+        <td style="color:${col}">${(act*100).toFixed(1)}%</td>
+        <td style="color:${col}">${diff>=0?'+':''}${(diff*100).toFixed(1)}%</td></tr>`;
+    }).filter(Boolean).join('');
+    const hitRate=samples.filter(x=>{
+      const hp=normCdf(x.m/RUN_SIGMA);return (hp>=.5)===x.homeWon;}).length/samples.length;
+    const mErr=samples.reduce((s,x)=>s+Math.abs(x.actM-x.m),0)/samples.length;
+    const verdict= best>RUN_SIGMA+0.01
+      ? `模型目前<b>略為過度自信</b>:建議把 σ 從 ${RUN_SIGMA.toFixed(2)} 調到 <b>${best.toFixed(2)}</b>(勝率會變得保守一點,更貼近實際)。`
+      : best<RUN_SIGMA-0.01
+      ? `模型目前<b>略為保守</b>:建議把 σ 從 ${RUN_SIGMA.toFixed(2)} 調到 <b>${best.toFixed(2)}</b>(勝率會更敢給,更貼近實際)。`
+      : `目前 σ=${RUN_SIGMA.toFixed(2)} 已是最誠實設定,<b>不需調整</b>。`;
+    out.innerHTML=`
+      <div style="margin-bottom:8px">回測 ${days} 天、共 <b>${samples.length}</b> 場完賽(另 ${skipped} 場資料不足跳過):
+        整體命中率 <b>${(hitRate*100).toFixed(1)}%</b>、平均分差誤差 <b>${mErr.toFixed(1)} 分</b>、Brier ${curB.toFixed(4)}(校準後 ${bestB.toFixed(4)},越低越好)。</div>
+      <div class="table-wrap"><table class="stat" style="min-width:420px">
+        <tr><th>模型信心</th><th>場數</th><th>平均信心</th><th>實際命中</th><th>偏差</th></tr>${rows}</table></div>
+      <div style="margin-top:10px">${verdict}</div>
+      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+        ${Math.abs(best-RUN_SIGMA)>0.01?`<button class="today-btn" id="calibApply" style="color:var(--amber);border-color:rgba(255,194,71,.5)">套用 σ=${best.toFixed(2)}</button>`:''}
+        ${Math.abs(RUN_SIGMA-4.3)>0.01?`<button class="today-btn" id="calibReset">還原預設 4.30</button>`:''}
+      </div>
+      <div class="tag" style="margin-top:8px">說明:偏差綠色=誠實(±4% 內)、黃色=輕微、紅色=明顯。σ 是「預期分差 → 勝率」的換算鈍感度,校準它不改變預測誰贏,只讓勝率百分比更可信。建議值已做阻尼(每次只修正一半),避免小樣本雜訊造成過度反應;套用後儲存在這台裝置,建議每一兩週體檢一次。</div>`;
+    const ap=$('calibApply');
+    if(ap)ap.addEventListener('click',()=>{
+      RUN_SIGMA=best;localStorage.setItem('mlb_sigma',best);
+      ap.textContent='已套用 ✓';ap.disabled=true;
+      loadDay();
+    });
+    const rs=$('calibReset');
+    if(rs)rs.addEventListener('click',()=>{
+      RUN_SIGMA=4.3;localStorage.removeItem('mlb_sigma');
+      rs.textContent='已還原 ✓';rs.disabled=true;
+      loadDay();
+    });
+  }catch(e){
+    out.innerHTML=`<span style="color:var(--miss)">體檢失敗:${esc(e.message)}</span>`;prog.textContent='';
+  }
+  calibRunning=false;
+});
 
 const dp=$('datePick');dp.value=etToday();
 $('loadBtn').addEventListener('click',loadDay);
