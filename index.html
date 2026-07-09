@@ -300,6 +300,10 @@
       <div class="sec-head"><h2>今日頭條</h2><span class="tag" id="hlTag"></span></div>
       <div id="headlines"></div>
     </section>
+    <section id="txSec" class="hidden">
+      <div class="sec-head"><h2>聯盟動態</h2><span class="tag">MLB 官方異動紀錄 · 真實新聞</span></div>
+      <div id="txList"></div>
+    </section>
     <section>
       <div class="sec-head"><h2 id="listTitle">比賽</h2><span class="tag" id="listTag"></span></div>
       <div id="games"><div class="empty">載入中…</div></div>
@@ -699,6 +703,7 @@ async function loadDay(quiet){
     st.textContent=(finals?`完成 · ${finals} 場已完賽已比對`:'完成 · 該日尚無完賽結果')
       +(refreshTimer?' · 🔴 每 45 秒自動更新':'');
     bindTeamClicks();
+    loadTransactions(date);
     const summary=buildDailySummary(date,games,curPreds,reviews,{hits,errSum,errN});
     $('aiText').textContent=summary;
     $('aiSec').classList.toggle('hidden',!summary);
@@ -864,6 +869,37 @@ $('searchBox').addEventListener('input',()=>{
     }catch(e){$('searchResults').innerHTML=`<div class="empty">搜尋失敗:${esc(e.message)}</div>`;}
   },300);
 });
+/* ---------- 聯盟動態(官方異動 = 真實新聞) ---------- */
+const TX_ZH=[
+  [/trade/i,'交易'],[/signed as free agent|signed/i,'簽約'],
+  [/recalled/i,'升上大聯盟'],[/optioned/i,'下放小聯盟'],
+  [/injured list/i,'傷兵名單'],[/activated/i,'啟用歸隊'],
+  [/designated for assignment/i,'DFA 指定讓渡'],[/claimed off waivers/i,'讓渡承接'],
+  [/released/i,'釋出'],[/selected/i,'契約選入'],[/purchased/i,'契約購入'],
+  [/retired/i,'退休'],[/suspension|suspended/i,'禁賽']];
+function txZh(t){for(const[re,zh]of TX_ZH)if(re.test(t||''))return zh;return t||'異動';}
+async function loadTransactions(date){
+  try{
+    const d=await jget(`${API}/transactions?startDate=${shiftDate(date,-1)}&endDate=${date}`);
+    let tx=(d.transactions||[]).filter(t=>t.description);
+    tx.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.id||0)-(a.id||0));
+    // 優先顯示大事:交易/簽約/傷兵/釋出 排前面
+    const weight=t=>{const z=txZh(t.typeDesc);
+      return z==='交易'?0:z==='簽約'?1:z==='傷兵名單'?2:z==='釋出'?3:z==='DFA 指定讓渡'?4:5;};
+    tx.sort((a,b)=>weight(a)-weight(b));
+    tx=tx.slice(0,10);
+    if(!tx.length){$('txSec').classList.add('hidden');return;}
+    $('txList').innerHTML=tx.map(t=>{
+      const zh=txZh(t.typeDesc);
+      const who=t.person?`<span class="pnm" data-pid="${t.person.id}" style="cursor:pointer;color:var(--chalk);font-weight:600">${esc(t.person.fullName)}</span> · `:'';
+      const team=t.toTeam?.name||t.fromTeam?.name||'';
+      return `<div class="headline"><span class="hk">${esc(zh)}</span>${who}${team?esc(team)+' — ':''}<span style="color:var(--muted)">${esc(t.description)}</span></div>`;
+    }).join('');
+    $('txSec').classList.remove('hidden');
+    bindPlayerClicks($('txList'));
+  }catch(e){$('txSec').classList.add('hidden');}
+}
+
 /* ---------- Gameday(單場即時)---------- */
 let gameTimer=null,curGameId=null;
 function stopGameTimer(){clearTimeout(gameTimer);gameTimer=null;}
