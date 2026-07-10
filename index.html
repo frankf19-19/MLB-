@@ -290,6 +290,7 @@
           <span class="tag" id="calibProg"></span>
         </div>
         <div id="calibOut" style="font-size:14px">按「開始體檢」,會逐日重算過去的預測並跟實際結果比對:檢查模型說 60% 時是否真的中六成、預期分差誤差多大,並自動找出最誠實的勝率換算參數(σ)。跑 14 天約需 10~20 秒。</div>
+        <div id="calibHist"></div>
       </div>
     </section>
     <section id="aiSec" class="hidden">
@@ -334,7 +335,7 @@
     </section>
   </div>
 
-  <footer>模型:兩隊得失分 × 打線 OPS 混合估火力 → 預期比分(含主場 +0.2 分),再依先發 ERA(上限 ±0.8)與牛棚 ERA(上限 ±0.5)修正。戰績與先發數據回看時取「該日之前」;打線 OPS 與牛棚為本季累計,回看較早日期時此兩項略有事後之明,僅供參考。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。</footer>
 </div>
 
 <script>
@@ -384,43 +385,71 @@ async function fetchGames(date){
   return out;
 }
 
-/* 先發投手數據(取「該日期之前」的累計,回測不偷看未來) */
+/* 先發投手數據:球季累計 + 近30天(皆取「該日期之前」,回測不偷看未來) */
 async function fetchPitcherStats(ids,season,endDate){
   const out={}; if(!ids.length)return out;
-  const parse=d=>{(d.people||[]).forEach(p=>{
+  const parseInto=(d,key)=>{(d.people||[]).forEach(p=>{
     const sp=(p.stats||[]).find(s=>s.group?.displayName==='pitching')?.splits||[];
     if(!sp.length)return; const st=sp[sp.length-1].stat||{};
     const era=parseFloat(st.era), ip=parseFloat(st.inningsPitched);
-    if(isFinite(era)&&isFinite(ip))out[p.id]={era,ip};});};
+    if(isFinite(era)&&isFinite(ip)){out[p.id]=out[p.id]||{};out[p.id][key]={era,ip};}});};
   try{
-    parse(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${season}-01-01,endDate=${endDate},season=${season})`));
+    parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${season}-01-01,endDate=${endDate},season=${season})`),'season');
   }catch(e){}
-  const missing=ids.filter(i=>!out[i]);
+  try{
+    parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${shiftDate(endDate,-29)},endDate=${endDate},season=${season})`),'recent');
+  }catch(e){}
+  const missing=ids.filter(i=>!out[i]||!out[i].season);
   if(missing.length){
-    try{parse(await jget(`${API}/people?personIds=${missing.join(',')}&hydrate=stats(group=[pitching],type=[season],season=${season})`));}catch(e){}
+    try{parseInto(await jget(`${API}/people?personIds=${missing.join(',')}&hydrate=stats(group=[pitching],type=[season],season=${season})`),'season');}catch(e){}
   }
+  // 攤平:era/ip = 有效值(球季 + 近況加權);另保留 recent 供文字說明
+  Object.values(out).forEach(o=>{
+    const s=o.season,r=o.recent;
+    if(s){
+      let era=s.era;
+      if(r&&r.ip>=8){const wr=0.35*r.ip/(r.ip+15);era=(1-wr)*s.era+wr*r.era;}
+      o.era=era;o.ip=s.ip;o.seasonEra=s.era;
+      if(r&&r.ip>=8){o.recEra=r.era;o.recIp=r.ip;}
+    }else if(r){o.era=r.era;o.ip=r.ip;}
+  });
   return out;
 }
 
 /* 全隊打線 OPS + 牛棚(救援群)ERA:各一次呼叫抓全聯盟 */
-async function fetchTeamExtras(season){
+async function fetchTeamExtras(season,asOf){
   const ex={map:{},lgOPS:null,lgBpEra:null};
+  const put=(id,k,v)=>{(ex.map[id]=ex.map[id]||{})[k]=v;};
   try{
     const d=await jget(`${API}/teams/stats?sportId=1&group=hitting&stats=season&season=${season}`);
-    const sp=(d.stats||[])[0]?.splits||[];
-    sp.forEach(s=>{const id=s.team?.id,ops=parseFloat(s.stat?.ops);
-      if(id&&isFinite(ops)){(ex.map[id]=ex.map[id]||{}).ops=ops;}});
+    ((d.stats||[])[0]?.splits||[]).forEach(s=>{const id=s.team?.id,ops=parseFloat(s.stat?.ops);
+      if(id&&isFinite(ops))put(id,'ops',ops);});
     const v=Object.values(ex.map).map(t=>t.ops).filter(isFinite);
     if(v.length)ex.lgOPS=v.reduce((a,b)=>a+b,0)/v.length;
   }catch(e){}
   try{
     const d=await jget(`${API}/teams/stats?sportId=1&group=pitching&stats=statSplits&sitCodes=rp&season=${season}`);
-    const sp=(d.stats||[])[0]?.splits||[];
-    sp.forEach(s=>{const id=s.team?.id,era=parseFloat(s.stat?.era),ip=parseFloat(s.stat?.inningsPitched);
-      if(id&&isFinite(era)&&isFinite(ip)&&ip>=30){(ex.map[id]=ex.map[id]||{}).bpEra=era;(ex.map[id]).bpIp=ip;}});
+    ((d.stats||[])[0]?.splits||[]).forEach(s=>{const id=s.team?.id,era=parseFloat(s.stat?.era),ip=parseFloat(s.stat?.inningsPitched);
+      if(id&&isFinite(era)&&isFinite(ip)&&ip>=30){put(id,'bpEra',era);}});
     const v=Object.values(ex.map).map(t=>t.bpEra).filter(isFinite);
     if(v.length)ex.lgBpEra=v.reduce((a,b)=>a+b,0)/v.length;
   }catch(e){}
+  // 近14天攻守(相對 asOf,回看不偷看未來;抓不到就自動略過)
+  if(asOf){
+    const from=shiftDate(asOf,-13);
+    try{
+      const d=await jget(`${API}/teams/stats?sportId=1&group=hitting&stats=byDateRange&startDate=${from}&endDate=${asOf}&season=${season}`);
+      ((d.stats||[])[0]?.splits||[]).forEach(s=>{
+        const id=s.team?.id,r=parseFloat(s.stat?.runs),gp=parseFloat(s.stat?.gamesPlayed);
+        if(id&&isFinite(r)&&gp>=5)put(id,'recRSg',r/gp);});
+    }catch(e){}
+    try{
+      const d=await jget(`${API}/teams/stats?sportId=1&group=pitching&stats=byDateRange&startDate=${from}&endDate=${asOf}&season=${season}`);
+      ((d.stats||[])[0]?.splits||[]).forEach(s=>{
+        const id=s.team?.id,r=parseFloat(s.stat?.runs),gp=parseFloat(s.stat?.gamesPlayed);
+        if(id&&isFinite(r)&&gp>=5)put(id,'recRAg',r/gp);});
+    }catch(e){}
+  }
   return ex;
 }
 
@@ -436,19 +465,27 @@ function predict(g,pm,lg,ps,ex){
       why:`資料不足(球季初或查無得失分),改以兩隊勝率(主 ${(H.pct??.5).toFixed(3)} vs 客 ${(A.pct??.5).toFixed(3)})加主場優勢估計。`};
   }
   const hRS=H.rs/H.gp,hRA=H.ra/H.gp,aRS=A.rs/A.gp,aRA=A.ra/A.gp;
-
-  // 打線品質:得分(65%)與 OPS 推估得分(35%)混合,矯正串聯運氣
   const exm=ex?.map||{}, lgOPS=ex?.lgOPS;
-  const blendOff=(rsPg,ops)=>{
-    if(!(lgOPS&&isFinite(ops)))return {v:rsPg,used:false};
-    const opsRuns=lg*Math.pow(ops/lgOPS,1.8);
-    return {v:0.65*rsPg+0.35*opsRuns,used:true};
+  const exH=exm[g.homeId]||{},exA=exm[g.awayId]||{};
+
+  // 火力:整季得分 50% + 近14天得分 25% + OPS 推估 25%(缺項自動重分配)
+  const offense=(rsPg,ops,rec)=>{
+    const opsRuns=(lgOPS&&isFinite(ops))?lg*Math.pow(ops/lgOPS,1.8):null;
+    const parts=[[rsPg,0.5]];
+    if(isFinite(rec))parts.push([rec,0.25]);
+    if(opsRuns!=null)parts.push([opsRuns,0.25]);
+    const wsum=parts.reduce((s,p)=>s+p[1],0);
+    return {v:parts.reduce((s,p)=>s+p[0]*p[1],0)/wsum,
+            usedRec:isFinite(rec),usedOps:opsRuns!=null};
   };
-  const hOff=blendOff(hRS,exm[g.homeId]?.ops), aOff=blendOff(aRS,exm[g.awayId]?.ops);
+  // 失分:整季 70% + 近14天 30%
+  const defense=(raPg,rec)=>isFinite(rec)?{v:0.7*raPg+0.3*rec,usedRec:true}:{v:raPg,usedRec:false};
+  const hOff=offense(hRS,exH.ops,exH.recRSg), aOff=offense(aRS,exA.ops,exA.recRSg);
+  const hDef=defense(hRA,exH.recRAg), aDef=defense(aRA,exA.recRAg);
 
-  let expHome=(hOff.v/lg)*(aRA/lg)*lg+HOME_RUN_BOOST, expAway=(aOff.v/lg)*(hRA/lg)*lg;
+  let expHome=(hOff.v/lg)*(aDef.v/lg)*lg+HOME_RUN_BOOST, expAway=(aOff.v/lg)*(hDef.v/lg)*lg;
 
-  // 先發投手修正(ERA 相對聯盟;樣本收縮;×0.5 防重複計算;上限 ±0.8)
+  // 先發修正(era 已含近30天加權)
   const lgERA=lg*0.92;
   const stAdj=st=>{
     if(!st||!(st.ip>=10))return null;
@@ -460,11 +497,18 @@ function predict(g,pm,lg,ps,ex){
   const dHome=stAdj(hSt), dAway=stAdj(aSt);
   if(dHome!=null)expAway+=dHome;
   if(dAway!=null)expHome+=dAway;
+  const recNote=st=>{
+    if(!st||!isFinite(st.recEra)||!isFinite(st.seasonEra))return '';
+    const diff=st.recEra-st.seasonEra;
+    if(diff<=-0.9)return `,近30天更火燙(${st.recEra.toFixed(2)})`;
+    if(diff>=0.9)return `,近30天下滑(${st.recEra.toFixed(2)})`;
+    return '';
+  };
   let pitTxt='';
   if(hSt||aSt){
     const seg=[];
-    if(aSt&&g.awayPit)seg.push(`${g.awayPit}(ERA ${aSt.era.toFixed(2)})`);
-    if(hSt&&g.homePit)seg.push(`${g.homePit}(ERA ${hSt.era.toFixed(2)})`);
+    if(aSt&&g.awayPit)seg.push(`${g.awayPit}(ERA ${(aSt.seasonEra??aSt.era).toFixed(2)}${recNote(aSt)})`);
+    if(hSt&&g.homePit)seg.push(`${g.homePit}(ERA ${(hSt.seasonEra??hSt.era).toFixed(2)}${recNote(hSt)})`);
     pitTxt=`先發 ${seg.join(' vs ')}`;
     if(dHome!=null&&dAway!=null){
       const edge=(dAway-dHome);
@@ -476,7 +520,7 @@ function predict(g,pm,lg,ps,ex){
     pitTxt='先發未定或樣本不足,本場未做投手修正。';
   }
 
-  // 牛棚修正:救援群 ERA 相對聯盟,約承擔 1/3 局數;×0.6 防重複;上限 ±0.5
+  // 牛棚修正
   const lgBp=ex?.lgBpEra;
   const bpAdj=t=>{
     const bp=exm[t]?.bpEra;
@@ -501,14 +545,18 @@ function predict(g,pm,lg,ps,ex){
   if(margin>=0&&hs<=as)hs=as+1; if(margin<0&&as<=hs)as=hs+1;
   const fav=margin>=0?g.home:g.away;
   let why=`主隊場均得 ${r1(hRS)} 失 ${r1(hRA)},客隊場均得 ${r1(aRS)} 失 ${r1(aRA)}(聯盟平均 ${r1(lg)})。`;
-  if(hOff.used&&aOff.used){
-    const ho=exm[g.homeId].ops,ao=exm[g.awayId].ops;
-    why+=`打線 OPS 主 ${ho.toFixed(3)}、客 ${ao.toFixed(3)}(聯盟 ${lgOPS.toFixed(3)}),已與得分混合估火力。`;
+  const recBits=[];
+  if(hOff.usedRec||hDef.usedRec)recBits.push(`主隊近14天 得${isFinite(exH.recRSg)?r1(exH.recRSg):'-'} 失${isFinite(exH.recRAg)?r1(exH.recRAg):'-'}`);
+  if(aOff.usedRec||aDef.usedRec)recBits.push(`客隊近14天 得${isFinite(exA.recRSg)?r1(exA.recRSg):'-'} 失${isFinite(exA.recRAg)?r1(exA.recRAg):'-'}`);
+  if(recBits.length)why+=`近況已納入:${recBits.join('、')}。`;
+  if(hOff.usedOps&&aOff.usedOps){
+    why+=`打線 OPS 主 ${exH.ops.toFixed(3)}、客 ${exA.ops.toFixed(3)}(聯盟 ${lgOPS.toFixed(3)})。`;
   }
   why+=pitTxt+bpTxt;
-  why+=`含主場 +0.2 分,修正後得分期望 ${r1(expAway)}:${r1(expHome)}(客:主),預期 ${fav} 贏約 ${r1(Math.abs(margin))} 分。`;
+  why+=`含主場 +0.2 分,修正後得分期望 ${expAway.toFixed(1)}:${expHome.toFixed(1)}(客:主),預期 ${fav} 贏約 ${r1(Math.abs(margin))} 分。`;
   if(Math.abs(margin)<0.8) why+=`分差不到 1 分,實質接近五五波。`;
   return {home_prob:hp,away_prob:1-hp,predicted_winner:fav,home_score_pred:hs,away_score_pred:as,
+    exp_home:+expHome.toFixed(1),exp_away:+expAway.toFixed(1),
     margin:Math.abs(margin),raw_margin:margin,why,
     pitAdjusted:(dHome!=null||dAway!=null),bpAdjusted:(bpH!=null&&bpA!=null)};
 }
@@ -581,7 +629,7 @@ function gameCard(g,p,rv){
       <div class="basestate">${diamondSvg(g.on1,g.on2,g.on3)}<span class="outs"><b>${g.outs??0}</b> 出局</span></div>
     </div>`:'';
   const predLine=hasScore
-    ?`<div class="meta scorepred">模型預期比分 ${p.away_score_pred}–${p.home_score_pred}(客–主) · 預期分差 <b>${r1(p.margin)}</b> 分 · 預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`
+    ?`<div class="meta scorepred">預期比分 <b>${p.exp_away!=null?p.exp_away.toFixed(1):p.away_score_pred}–${p.exp_home!=null?p.exp_home.toFixed(1):p.home_score_pred}</b>(客–主,約 ${p.away_score_pred}:${p.home_score_pred}) · 分差 <b>${r1(p.margin)}</b> · 總分期望 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b> · 預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`
     :`<div class="meta scorepred">預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`;
   const gdayBtn=(isLive||isFinal)?`<button class="gday" data-gid="${g.id}">GAMEDAY ▶</button>`:'';
   return `<div class="game ${isFinal?'done':''}">
@@ -667,7 +715,7 @@ async function loadDay(quiet){
   try{
     const asOf=shiftDate(date,-1);
     const season=+date.slice(0,4);
-    const [pm,games,ex]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season)]);
+    const [pm,games,ex]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season,asOf)]);
     const lg=leagueRPG(pm);
     const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
     const ps=await fetchPitcherStats(pitIds,season,asOf);
@@ -1157,62 +1205,106 @@ $('pdBackBtn').addEventListener('click',()=>{
 $('gdBackBtn').addEventListener('click',()=>showView('home'));
 $('homeLink').addEventListener('click',()=>showView('home'));
 
-/* ---------- 模型體檢:回測校準 ---------- */
+/* ---------- 模型體檢:回測校準(每日自動 + 手動報告) ---------- */
 $('calibBtn').addEventListener('click',()=>{
   showView('home');
   $('calibSec').classList.toggle('hidden');
-  if(!$('calibSec').classList.contains('hidden'))$('calibSec').scrollIntoView({behavior:'smooth'});
+  if(!$('calibSec').classList.contains('hidden')){renderCalibHist();$('calibSec').scrollIntoView({behavior:'smooth'});}
 });
 let calibRunning=false;
+function calibHist(){try{return JSON.parse(localStorage.getItem('mlb_calib_hist'))||[]}catch(e){return[]}}
+function pushCalibHist(rec){const h=calibHist();h.push(rec);while(h.length>60)h.shift();
+  localStorage.setItem('mlb_calib_hist',JSON.stringify(h));}
+function renderCalibHist(){
+  const h=calibHist().slice(-10).reverse();
+  const el=$('calibHist');
+  if(!h.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="pos-group" style="margin-top:14px">校準履歷(此裝置)</div>
+    <div class="table-wrap"><table class="stat" style="min-width:360px">
+    <tr><th>日期</th><th>σ</th><th>近14天命中</th><th>樣本</th></tr>
+    ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.hit}%</td><td>${r.n}</td></tr>`).join('')}
+    </table></div>`;
+}
+async function collectSamples(days,prog){
+  const season=+etToday().slice(0,4);
+  const ex=await fetchTeamExtras(season,shiftDate(etToday(),-1));
+  const samples=[];let skipped=0;
+  for(let i=1;i<=days;i++){
+    const date=shiftDate(etToday(),-i), asOf=shiftDate(date,-1);
+    if(prog)prog(i,days,samples.length);
+    try{
+      const [pm,games]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date)]);
+      const lg=leagueRPG(pm);
+      const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
+      const ps=await fetchPitcherStats(pitIds,season,asOf);
+      games.forEach(g=>{
+        if(g.status!=='Final')return;
+        const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)return;
+        const p=predict(g,pm,lg,ps,ex);
+        if(p.raw_margin==null){skipped++;return;}
+        samples.push({m:p.raw_margin,homeWon,actM:(g.homeScore??0)-(g.awayScore??0)});
+      });
+    }catch(e){}
+  }
+  return {samples,skipped};
+}
+const brierFor=(samples,s)=>samples.reduce((sum,x)=>{
+  const p=Math.max(.05,Math.min(.95,normCdf(x.m/s)));
+  return sum+Math.pow(p-(x.homeWon?1:0),2);},0)/samples.length;
+function bestSigma(samples){
+  let raw=RUN_SIGMA,rb=brierFor(samples,RUN_SIGMA);
+  for(let s=3.0;s<=6.75;s+=0.25){const b=brierFor(samples,s);if(b<rb-1e-9){rb=b;raw=s;}}
+  let best=RUN_SIGMA;
+  if(Math.abs(raw-RUN_SIGMA)>0.01)best=Math.round((RUN_SIGMA+(raw-RUN_SIGMA)*0.5)*4)/4;
+  return {best,curB:brierFor(samples,RUN_SIGMA),bestB:brierFor(samples,best)};
+}
+const hitRateOf=samples=>samples.filter(x=>(normCdf(x.m/RUN_SIGMA)>=.5)===x.homeWon).length/samples.length;
+
+/* 每日自動校準:每天第一次開站時背景執行 */
+async function autoCalibrate(){
+  if(calibRunning)return;
+  if(localStorage.getItem('mlb_calib_last')===etToday())return;
+  calibRunning=true;
+  const st=$('status');
+  try{
+    const {samples}=await collectSamples(14,(i,n)=>{
+      st.textContent=`🔧 每日自動校準中 ${i}/${n} 天…(不影響瀏覽)`;});
+    localStorage.setItem('mlb_calib_last',etToday());
+    if(samples.length>=30){
+      const {best}=bestSigma(samples);
+      const changed=Math.abs(best-RUN_SIGMA)>0.01;
+      if(changed){RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));}
+      const hit=hitRateOf(samples);
+      pushCalibHist({d:etToday(),s:+RUN_SIGMA.toFixed(2),hit:+(hit*100).toFixed(1),n:samples.length});
+      st.textContent=`✅ 今日自動校準完成:σ=${RUN_SIGMA.toFixed(2)}${changed?'(已微調)':'(免調整)'} · 近14天命中 ${(hit*100).toFixed(1)}%`;
+      if(changed)loadDay(true);
+    }else{
+      st.textContent='今日自動校準:樣本不足,略過(球季初屬正常)';
+    }
+  }catch(e){/* 靜默失敗,明天再試 */}
+  calibRunning=false;
+}
+
+/* 手動完整報告 */
 $('calibRun').addEventListener('click',async()=>{
   if(calibRunning)return;calibRunning=true;
   const days=+$('calibDays').value;
   const prog=$('calibProg'),out=$('calibOut');
   out.innerHTML='';prog.textContent='準備中…';
   try{
-    const season=+etToday().slice(0,4);
-    const ex=await fetchTeamExtras(season);
-    const samples=[];let skipped=0;
-    for(let i=1;i<=days;i++){
-      const date=shiftDate(etToday(),-i), asOf=shiftDate(date,-1);
-      prog.textContent=`回測中 ${i}/${days} 天…(已收 ${samples.length} 場)`;
-      try{
-        const [pm,games]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date)]);
-        const lg=leagueRPG(pm);
-        const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
-        const ps=await fetchPitcherStats(pitIds,season,asOf);
-        games.forEach(g=>{
-          if(g.status!=='Final')return;
-          const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)return;
-          const p=predict(g,pm,lg,ps,ex);
-          if(p.raw_margin==null){skipped++;return;}
-          samples.push({m:p.raw_margin,homeWon,actM:(g.homeScore??0)-(g.awayScore??0)});
-        });
-      }catch(e){/* 單日失敗跳過 */}
-    }
+    const {samples,skipped}=await collectSamples(days,(i,n,c)=>{
+      prog.textContent=`回測中 ${i}/${n} 天…(已收 ${c} 場)`;});
     prog.textContent='';
     if(samples.length<30){
-      out.innerHTML=`<span style="color:var(--miss)">樣本只有 ${samples.length} 場,不足以校準(至少需要約 30 場)。請改跑更長天數,或等球季累積。</span>`;
+      out.innerHTML=`<span style="color:var(--miss)">樣本只有 ${samples.length} 場,不足以校準(至少約 30 場)。請改跑更長天數。</span>`;
       calibRunning=false;return;
     }
-    // 以候選 σ 計算 Brier 分數(越低越誠實)
-    const brier=s=>samples.reduce((sum,x)=>{
-      const p=Math.max(.05,Math.min(.95,normCdf(x.m/s)));
-      return sum+Math.pow(p-(x.homeWon?1:0),2);},0)/samples.length;
-    let best=RUN_SIGMA,bestB=brier(RUN_SIGMA);
-    for(let s=3.0;s<=6.75;s+=0.25){const b=brier(s);if(b<bestB-1e-9){bestB=b;best=s;}}
-    // 阻尼:小樣本回測有噪音,每次只往建議方向修正一半,避免過度反應
-    if(Math.abs(best-RUN_SIGMA)>0.01){
-      best=Math.round((RUN_SIGMA+(best-RUN_SIGMA)*0.5)*4)/4;
-      bestB=brier(best);
-    }
-    const curB=brier(RUN_SIGMA);
-    // 信心分桶(用目前 σ)
+    const {best,curB,bestB}=bestSigma(samples);
     const buckets=[[.50,.55],[.55,.60],[.60,.65],[.65,.75],[.75,1.01]];
     const rows=buckets.map(([lo,hi])=>{
       const grp=samples.map(x=>{
         const hp=Math.max(.05,Math.min(.95,normCdf(x.m/RUN_SIGMA)));
-        const favHome=hp>=.5, conf=favHome?hp:1-hp, favWon=favHome?x.homeWon:!x.homeWon;
+        const favHome=hp>=.5,conf=favHome?hp:1-hp,favWon=favHome?x.homeWon:!x.homeWon;
         return {conf,favWon};
       }).filter(x=>x.conf>=lo&&x.conf<hi);
       if(!grp.length)return null;
@@ -1225,17 +1317,16 @@ $('calibRun').addEventListener('click',async()=>{
         <td style="color:${col}">${(act*100).toFixed(1)}%</td>
         <td style="color:${col}">${diff>=0?'+':''}${(diff*100).toFixed(1)}%</td></tr>`;
     }).filter(Boolean).join('');
-    const hitRate=samples.filter(x=>{
-      const hp=normCdf(x.m/RUN_SIGMA);return (hp>=.5)===x.homeWon;}).length/samples.length;
+    const hitRate=hitRateOf(samples);
     const mErr=samples.reduce((s,x)=>s+Math.abs(x.actM-x.m),0)/samples.length;
-    const verdict= best>RUN_SIGMA+0.01
-      ? `模型目前<b>略為過度自信</b>:建議把 σ 從 ${RUN_SIGMA.toFixed(2)} 調到 <b>${best.toFixed(2)}</b>(勝率會變得保守一點,更貼近實際)。`
-      : best<RUN_SIGMA-0.01
-      ? `模型目前<b>略為保守</b>:建議把 σ 從 ${RUN_SIGMA.toFixed(2)} 調到 <b>${best.toFixed(2)}</b>(勝率會更敢給,更貼近實際)。`
-      : `目前 σ=${RUN_SIGMA.toFixed(2)} 已是最誠實設定,<b>不需調整</b>。`;
+    const verdict=Math.abs(best-RUN_SIGMA)<=0.01
+      ? `目前 σ=${RUN_SIGMA.toFixed(2)} 已是最誠實設定,<b>不需調整</b>。`
+      : best>RUN_SIGMA
+      ? `模型<b>略為過度自信</b>:建議 σ 由 ${RUN_SIGMA.toFixed(2)} 調至 <b>${best.toFixed(2)}</b>(已含阻尼)。`
+      : `模型<b>略為保守</b>:建議 σ 由 ${RUN_SIGMA.toFixed(2)} 調至 <b>${best.toFixed(2)}</b>(已含阻尼)。`;
     out.innerHTML=`
-      <div style="margin-bottom:8px">回測 ${days} 天、共 <b>${samples.length}</b> 場完賽(另 ${skipped} 場資料不足跳過):
-        整體命中率 <b>${(hitRate*100).toFixed(1)}%</b>、平均分差誤差 <b>${mErr.toFixed(1)} 分</b>、Brier ${curB.toFixed(4)}(校準後 ${bestB.toFixed(4)},越低越好)。</div>
+      <div style="margin-bottom:8px">回測 ${days} 天、共 <b>${samples.length}</b> 場(另 ${skipped} 場資料不足):
+        命中率 <b>${(hitRate*100).toFixed(1)}%</b>、平均分差誤差 <b>${mErr.toFixed(1)} 分</b>、Brier ${curB.toFixed(4)} → ${bestB.toFixed(4)}。</div>
       <div class="table-wrap"><table class="stat" style="min-width:420px">
         <tr><th>模型信心</th><th>場數</th><th>平均信心</th><th>實際命中</th><th>偏差</th></tr>${rows}</table></div>
       <div style="margin-top:10px">${verdict}</div>
@@ -1243,19 +1334,19 @@ $('calibRun').addEventListener('click',async()=>{
         ${Math.abs(best-RUN_SIGMA)>0.01?`<button class="today-btn" id="calibApply" style="color:var(--amber);border-color:rgba(255,194,71,.5)">套用 σ=${best.toFixed(2)}</button>`:''}
         ${Math.abs(RUN_SIGMA-4.3)>0.01?`<button class="today-btn" id="calibReset">還原預設 4.30</button>`:''}
       </div>
-      <div class="tag" style="margin-top:8px">說明:偏差綠色=誠實(±4% 內)、黃色=輕微、紅色=明顯。σ 是「預期分差 → 勝率」的換算鈍感度,校準它不改變預測誰贏,只讓勝率百分比更可信。建議值已做阻尼(每次只修正一半),避免小樣本雜訊造成過度反應;套用後儲存在這台裝置,建議每一兩週體檢一次。</div>`;
+      <div class="tag" style="margin-top:8px">每天第一次開站會自動背景校準並套用(含阻尼);此處為完整報告與手動控制。偏差綠=誠實(±4%)、黃=輕微、紅=明顯。</div>`;
     const ap=$('calibApply');
     if(ap)ap.addEventListener('click',()=>{
-      RUN_SIGMA=best;localStorage.setItem('mlb_sigma',best);
-      ap.textContent='已套用 ✓';ap.disabled=true;
-      loadDay();
+      RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));
+      pushCalibHist({d:etToday(),s:+best.toFixed(2),hit:+(hitRate*100).toFixed(1),n:samples.length});
+      ap.textContent='已套用 ✓';ap.disabled=true;renderCalibHist();loadDay();
     });
     const rs=$('calibReset');
     if(rs)rs.addEventListener('click',()=>{
       RUN_SIGMA=4.3;localStorage.removeItem('mlb_sigma');
-      rs.textContent='已還原 ✓';rs.disabled=true;
-      loadDay();
+      rs.textContent='已還原 ✓';rs.disabled=true;loadDay();
     });
+    renderCalibHist();
   }catch(e){
     out.innerHTML=`<span style="color:var(--miss)">體檢失敗:${esc(e.message)}</span>`;prog.textContent='';
   }
@@ -1268,7 +1359,7 @@ $('prevBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,-1);loadD
 $('nextBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,1);loadDay();});
 $('todayBtn').addEventListener('click',()=>{dp.value=etToday();loadDay();});
 dp.addEventListener('change',loadDay);
-loadDay();
+loadDay().then(()=>autoCalibrate());
 </script>
 </body>
 </html>
