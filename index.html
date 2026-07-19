@@ -373,7 +373,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.6</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.7</footer>
 </div>
 
 <script>
@@ -654,7 +654,10 @@ function gameCard(g,p,rv){
     pitSeg,
     (!isFinal&&!isLive&&g.detail&&g.detail!=='Scheduled')?g.detail:null].filter(Boolean).join(' · ');
   const innTxt=isLive&&g.curInn?`${g.curInn}局${g.isTop?'上':'下'}`:'';
-  const pill=isFinal?(rv?`<span class="pill ${rv.hit?'hit':'miss'}">${rv.hit?'命中':'未中'}</span>`:'<span class="pill wait">終場</span>')
+  const special=/postpon/i.test(g.detail)?'延賽':/suspend/i.test(g.detail)?'保留比賽'
+    :/cancel/i.test(g.detail)?'取消':null;
+  const pill=special?`<span class="pill wait">${special}</span>`
+    :isFinal?(rv?`<span class="pill ${rv.hit?'hit':'miss'}">${rv.hit?'命中':'未中'}</span>`:'<span class="pill wait">終場</span>')
     :isLive?`<span class="pill live"><span class="dot"></span>LIVE ${innTxt}</span>`
     :`<span class="pill wait">未開打</span>`;
   const recA=g.awayRec?`<span class="rec">${g.awayRec}</span>`:'';
@@ -772,6 +775,9 @@ async function loadDay(quiet){
     const lg=leagueRPG(pm);
     const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
     const ps=await fetchPitcherStats(pitIds,season,asOf);
+    // 排序:進行中 → 未開打 → 已完賽(組內維持官方時間序)
+    const wgt=g=>g.status==='Live'?0:(g.status==='Final'?2:1);
+    games.sort((a,b)=>wgt(a)-wgt(b));
     let hits=0,finals=0,errSum=0,errN=0,html='';
     const reviews=[];curGames=games;curPreds=[];
     games.forEach(g=>{
@@ -779,7 +785,8 @@ async function loadDay(quiet){
       g.awayRec=A?`${A.w}-${A.l}`:''; g.homeRec=H?`${H.w}-${H.l}`:'';
       g.aPitInfo=ps[g.awayPitId]||null; g.hPitInfo=ps[g.homePitId]||null;
       const p=predict(g,pm,lg,ps,ex);curPreds.push(p);
-      const rv=g.status==='Final'?review(g,p):null;
+      const isSpecial=/postpon|suspend|cancel/i.test(g.detail||'');
+      const rv=(g.status==='Final'&&!isSpecial)?review(g,p):null;
       if(rv){rv.g=g;finals++;if(rv.hit)hits++;
         if(p.raw_margin!=null){errSum+=Math.abs(rv.actMargin-p.raw_margin);errN++;}}
       reviews.push(rv);html+=gameCard(g,p,rv);
@@ -1401,6 +1408,7 @@ async function collectSamples(days,prog){
       const ps=await fetchPitcherStats(pitIds,season,asOf);
       games.forEach(g=>{
         if(g.status!=='Final')return;
+        if(/postpon|suspend|cancel/i.test(g.detail||''))return;
         const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)return;
         const p=predict(g,pm,lg,ps,ex);
         const mPre=p.raw_margin_pre??p.raw_margin;
