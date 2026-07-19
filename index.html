@@ -19,7 +19,8 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
-    background:radial-gradient(1200px 600px at 50% -10%, #163150 0%, transparent 60%), var(--field);
+    background:radial-gradient(1200px 600px at 50% -10%, var(--glow-top,#163150) 0%, transparent 60%), var(--field);
+    transition:background 1s ease;
     color:var(--chalk); font-family:var(--body); line-height:1.6; min-height:100vh;
     padding:clamp(16px,4vw,40px) clamp(14px,4vw,28px) 60px;
   }
@@ -239,6 +240,14 @@
   .player .pnm:hover{color:var(--teal);border-bottom-color:var(--teal)}
   .duel .dnm{cursor:pointer}
   .duel .dnm:hover{color:var(--teal)}
+  #fx{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .wrap{position:relative;z-index:1}
+  header,.game,.player,.analysis,.headline,.pd-head,.bio .b,.table-wrap,.zone-box,.pitch-item,.gd-score,.sr-item{transition:background 1s ease,border-color 1s ease}
+  #themeBar{display:flex;align-items:center;gap:7px;margin-top:12px;position:relative;flex-wrap:wrap}
+  .theme-b{font-size:16px;line-height:1;background:rgba(255,255,255,.06);border:1px solid var(--line);
+    border-radius:999px;width:34px;height:34px;cursor:pointer;transition:transform .12s,border-color .12s}
+  .theme-b:hover{transform:translateY(-1px)}
+  .theme-b.on{border-color:var(--amber);box-shadow:0 0 10px rgba(255,194,71,.3)}
   .empty{color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:22px;text-align:center;font-size:14.5px}
   footer{margin-top:38px;color:var(--muted);font-size:12.5px;font-family:var(--mono);text-align:center;line-height:1.7}
   .hidden{display:none}
@@ -249,6 +258,7 @@
 </style>
 </head>
 <body>
+<canvas id="fx"></canvas>
 <div class="wrap">
   <header>
     <div class="eyebrow">Daily Baseball Model · 點隊名看名單 · 可搜尋球員</div>
@@ -267,6 +277,7 @@
       <button class="today-btn" id="calibBtn">模型體檢</button>
       <button class="btn" id="loadBtn"><span class="ico">⟳</span><span>載入</span></button>
     </div>
+    <div id="themeBar"></div>
     <div class="score-row" id="statRow">
       <div class="stat"><div class="num" id="dayPct">—</div><div class="lbl">當日命中率</div></div>
       <div class="stat"><div class="num small" id="dayRec">—</div><div class="lbl">命中 / 已完賽</div></div>
@@ -342,6 +353,7 @@
 const API='https://statsapi.mlb.com/api/v1';
 const HOME_RUN_BOOST=0.20, HOME_EDGE=0.035;
 let RUN_SIGMA=parseFloat(localStorage.getItem('mlb_sigma'))||4.3;
+let MARGIN_K=parseFloat(localStorage.getItem('mlb_mk'))||1.0;
 const $=id=>document.getElementById(id);
 const esc=s=>(s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const r1=x=>Math.round(x*10)/10;
@@ -539,6 +551,9 @@ function predict(g,pm,lg,ps,ex){
       : `兩隊牛棚水準接近(ERA ${eA.toFixed(2)} vs ${eH.toFixed(2)})。`;
   }else bpTxt='牛棚數據暫缺,本場未做牛棚修正。';
 
+  const marginPre=expHome-expAway;
+  const mid=(expHome+expAway)/2, half=marginPre/2*MARGIN_K;
+  expHome=mid+half; expAway=mid-half;
   const margin=expHome-expAway;
   const hp=Math.max(.05,Math.min(.95,normCdf(margin/RUN_SIGMA)));
   let hs=Math.round(expHome),as=Math.round(expAway);
@@ -557,7 +572,7 @@ function predict(g,pm,lg,ps,ex){
   if(Math.abs(margin)<0.8) why+=`分差不到 1 分,實質接近五五波。`;
   return {home_prob:hp,away_prob:1-hp,predicted_winner:fav,home_score_pred:hs,away_score_pred:as,
     exp_home:+expHome.toFixed(1),exp_away:+expAway.toFixed(1),
-    margin:Math.abs(margin),raw_margin:margin,why,
+    margin:Math.abs(margin),raw_margin:margin,raw_margin_pre:marginPre,why,
     pitAdjusted:(dHome!=null||dAway!=null),bpAdjusted:(bpH!=null&&bpA!=null)};
 }
 function review(g,p){
@@ -1205,7 +1220,7 @@ $('pdBackBtn').addEventListener('click',()=>{
 $('gdBackBtn').addEventListener('click',()=>showView('home'));
 $('homeLink').addEventListener('click',()=>showView('home'));
 
-/* ---------- 模型體檢:回測校準(每日自動 + 手動報告) ---------- */
+/* ---------- 模型體檢:回測校準(每日自動 + 分差係數 + 預測紀錄簿) ---------- */
 $('calibBtn').addEventListener('click',()=>{
   showView('home');
   $('calibSec').classList.toggle('hidden');
@@ -1215,15 +1230,33 @@ let calibRunning=false;
 function calibHist(){try{return JSON.parse(localStorage.getItem('mlb_calib_hist'))||[]}catch(e){return[]}}
 function pushCalibHist(rec){const h=calibHist();h.push(rec);while(h.length>60)h.shift();
   localStorage.setItem('mlb_calib_hist',JSON.stringify(h));}
+function ledger(){try{return JSON.parse(localStorage.getItem('mlb_ledger'))||[]}catch(e){return[]}}
+function mergeLedger(entries){
+  const L=ledger(),seen=new Set(L.map(x=>x.id));
+  entries.forEach(e=>{if(!seen.has(e.id)){L.push(e);seen.add(e.id);}});
+  while(L.length>600)L.shift();
+  localStorage.setItem('mlb_ledger',JSON.stringify(L));
+  return L.length;
+}
 function renderCalibHist(){
   const h=calibHist().slice(-10).reverse();
+  const L=ledger();
   const el=$('calibHist');
-  if(!h.length){el.innerHTML='';return;}
-  el.innerHTML=`<div class="pos-group" style="margin-top:14px">校準履歷(此裝置)</div>
-    <div class="table-wrap"><table class="stat" style="min-width:360px">
-    <tr><th>日期</th><th>σ</th><th>近14天命中</th><th>樣本</th></tr>
-    ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.hit}%</td><td>${r.n}</td></tr>`).join('')}
-    </table></div>`;
+  let html='';
+  if(L.length){
+    const hits=L.filter(x=>x.hit).length;
+    const mae=L.reduce((s,x)=>s+Math.abs(x.am-x.m*MARGIN_K),0)/L.length;
+    html+=`<div class="pos-group" style="margin-top:14px">預測紀錄簿(此裝置累計)</div>
+      <div style="font-size:13.5px">已記錄 <b>${L.length}</b> 場:命中率 <b>${(hits/L.length*100).toFixed(1)}%</b>、分差平均誤差 <b>${mae.toFixed(2)} 分</b>、目前參數 K=${MARGIN_K.toFixed(2)}、σ=${RUN_SIGMA.toFixed(2)}</div>`;
+  }
+  if(h.length){
+    html+=`<div class="pos-group" style="margin-top:14px">校準履歷</div>
+      <div class="table-wrap"><table class="stat" style="min-width:400px">
+      <tr><th>日期</th><th>σ</th><th>K</th><th>近14天命中</th><th>樣本</th></tr>
+      ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.n}</td></tr>`).join('')}
+      </table></div>`;
+  }
+  el.innerHTML=html;
 }
 async function collectSamples(days,prog){
   const season=+etToday().slice(0,4);
@@ -1241,26 +1274,37 @@ async function collectSamples(days,prog){
         if(g.status!=='Final')return;
         const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)return;
         const p=predict(g,pm,lg,ps,ex);
-        if(p.raw_margin==null){skipped++;return;}
-        samples.push({m:p.raw_margin,homeWon,actM:(g.homeScore??0)-(g.awayScore??0)});
+        const mPre=p.raw_margin_pre??p.raw_margin;
+        if(mPre==null){skipped++;return;}
+        samples.push({id:g.id,d:date,aw:g.away,hm:g.home,
+          m:mPre,homeWon,actM:(g.homeScore??0)-(g.awayScore??0)});
       });
     }catch(e){}
   }
   return {samples,skipped};
 }
-const brierFor=(samples,s)=>samples.reduce((sum,x)=>{
-  const p=Math.max(.05,Math.min(.95,normCdf(x.m/s)));
+const brierFor=(samples,s,k)=>samples.reduce((sum,x)=>{
+  const p=Math.max(.05,Math.min(.95,normCdf(x.m*(k??MARGIN_K)/s)));
   return sum+Math.pow(p-(x.homeWon?1:0),2);},0)/samples.length;
-function bestSigma(samples){
-  let raw=RUN_SIGMA,rb=brierFor(samples,RUN_SIGMA);
-  for(let s=3.0;s<=6.75;s+=0.25){const b=brierFor(samples,s);if(b<rb-1e-9){rb=b;raw=s;}}
+function bestK(samples){
+  let num=0,den=0;
+  samples.forEach(x=>{num+=x.m*x.actM;den+=x.m*x.m;});
+  if(den<1e-6)return MARGIN_K;
+  let raw=num/den;
+  raw=Math.max(0.6,Math.min(1.6,raw));
+  let k=MARGIN_K+(raw-MARGIN_K)*0.5;             // 阻尼
+  return Math.max(0.7,Math.min(1.4,Math.round(k*100)/100));
+}
+function bestSigma(samples,k){
+  let raw=RUN_SIGMA,rb=brierFor(samples,RUN_SIGMA,k);
+  for(let s=3.0;s<=6.75;s+=0.25){const b=brierFor(samples,s,k);if(b<rb-1e-9){rb=b;raw=s;}}
   let best=RUN_SIGMA;
   if(Math.abs(raw-RUN_SIGMA)>0.01)best=Math.round((RUN_SIGMA+(raw-RUN_SIGMA)*0.5)*4)/4;
-  return {best,curB:brierFor(samples,RUN_SIGMA),bestB:brierFor(samples,best)};
+  return {best,curB:brierFor(samples,RUN_SIGMA,MARGIN_K),bestB:brierFor(samples,best,k)};
 }
-const hitRateOf=samples=>samples.filter(x=>(normCdf(x.m/RUN_SIGMA)>=.5)===x.homeWon).length/samples.length;
+const hitRateOf=samples=>samples.filter(x=>(x.m>=0)===x.homeWon).length/samples.length;
 
-/* 每日自動校準:每天第一次開站時背景執行 */
+/* 每日自動校準:K(分差)→ σ(勝率)→ 記錄 */
 async function autoCalibrate(){
   if(calibRunning)return;
   if(localStorage.getItem('mlb_calib_last')===etToday())return;
@@ -1271,17 +1315,23 @@ async function autoCalibrate(){
       st.textContent=`🔧 每日自動校準中 ${i}/${n} 天…(不影響瀏覽)`;});
     localStorage.setItem('mlb_calib_last',etToday());
     if(samples.length>=30){
-      const {best}=bestSigma(samples);
-      const changed=Math.abs(best-RUN_SIGMA)>0.01;
-      if(changed){RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));}
+      const nk=bestK(samples);
+      const kChanged=Math.abs(nk-MARGIN_K)>0.005;
+      if(kChanged){MARGIN_K=nk;localStorage.setItem('mlb_mk',String(nk));}
+      const {best}=bestSigma(samples,MARGIN_K);
+      const sChanged=Math.abs(best-RUN_SIGMA)>0.01;
+      if(sChanged){RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));}
       const hit=hitRateOf(samples);
-      pushCalibHist({d:etToday(),s:+RUN_SIGMA.toFixed(2),hit:+(hit*100).toFixed(1),n:samples.length});
-      st.textContent=`✅ 今日自動校準完成:σ=${RUN_SIGMA.toFixed(2)}${changed?'(已微調)':'(免調整)'} · 近14天命中 ${(hit*100).toFixed(1)}%`;
-      if(changed)loadDay(true);
+      const total=mergeLedger(samples.map(x=>({id:x.id,d:x.d,aw:x.aw,hm:x.hm,
+        m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0})));
+      pushCalibHist({d:etToday(),s:+RUN_SIGMA.toFixed(2),k:+MARGIN_K.toFixed(2),
+        hit:+(hit*100).toFixed(1),n:samples.length});
+      st.textContent=`✅ 今日自動校準:K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近14天命中 ${(hit*100).toFixed(1)}% · 紀錄簿 ${total} 場`;
+      if(kChanged||sChanged)loadDay(true);
     }else{
       st.textContent='今日自動校準:樣本不足,略過(球季初屬正常)';
     }
-  }catch(e){/* 靜默失敗,明天再試 */}
+  }catch(e){}
   calibRunning=false;
 }
 
@@ -1299,11 +1349,13 @@ $('calibRun').addEventListener('click',async()=>{
       out.innerHTML=`<span style="color:var(--miss)">樣本只有 ${samples.length} 場,不足以校準(至少約 30 場)。請改跑更長天數。</span>`;
       calibRunning=false;return;
     }
-    const {best,curB,bestB}=bestSigma(samples);
+    const nk=bestK(samples);
+    const {best,curB,bestB}=bestSigma(samples,nk);
+    // 勝率信心分桶(現行 K/σ)
     const buckets=[[.50,.55],[.55,.60],[.60,.65],[.65,.75],[.75,1.01]];
     const rows=buckets.map(([lo,hi])=>{
       const grp=samples.map(x=>{
-        const hp=Math.max(.05,Math.min(.95,normCdf(x.m/RUN_SIGMA)));
+        const hp=Math.max(.05,Math.min(.95,normCdf(x.m*MARGIN_K/RUN_SIGMA)));
         const favHome=hp>=.5,conf=favHome?hp:1-hp,favWon=favHome?x.homeWon:!x.homeWon;
         return {conf,favWon};
       }).filter(x=>x.conf>=lo&&x.conf<hi);
@@ -1317,33 +1369,54 @@ $('calibRun').addEventListener('click',async()=>{
         <td style="color:${col}">${(act*100).toFixed(1)}%</td>
         <td style="color:${col}">${diff>=0?'+':''}${(diff*100).toFixed(1)}%</td></tr>`;
     }).filter(Boolean).join('');
+    // 分差段位:預測分差 vs 實際
+    const mb=[[0,.5],[.5,1],[1,1.5],[1.5,2.5],[2.5,99]];
+    const mrows=mb.map(([lo,hi])=>{
+      const grp=samples.filter(x=>{const a=Math.abs(x.m*MARGIN_K);return a>=lo&&a<hi;});
+      if(!grp.length)return null;
+      const favWin=grp.filter(x=>(x.m>=0)===x.homeWon).length/grp.length;
+      const impl=grp.reduce((s,x)=>s+Math.max(normCdf(x.m*MARGIN_K/RUN_SIGMA),1-normCdf(x.m*MARGIN_K/RUN_SIGMA)),0)/grp.length;
+      const predM=grp.reduce((s,x)=>s+Math.abs(x.m*MARGIN_K),0)/grp.length;
+      const actMside=grp.reduce((s,x)=>s+x.actM*Math.sign(x.m||1),0)/grp.length;
+      const col=Math.abs(favWin-impl)<=.05?'var(--hit)':'var(--amber)';
+      return `<tr><td>${lo}–${hi>10?'∞':hi} 分</td><td>${grp.length}</td>
+        <td>${(impl*100).toFixed(0)}%</td><td style="color:${col}">${(favWin*100).toFixed(0)}%</td>
+        <td>${predM.toFixed(2)}</td><td>${actMside.toFixed(2)}</td></tr>`;
+    }).filter(Boolean).join('');
     const hitRate=hitRateOf(samples);
-    const mErr=samples.reduce((s,x)=>s+Math.abs(x.actM-x.m),0)/samples.length;
-    const verdict=Math.abs(best-RUN_SIGMA)<=0.01
-      ? `目前 σ=${RUN_SIGMA.toFixed(2)} 已是最誠實設定,<b>不需調整</b>。`
-      : best>RUN_SIGMA
-      ? `模型<b>略為過度自信</b>:建議 σ 由 ${RUN_SIGMA.toFixed(2)} 調至 <b>${best.toFixed(2)}</b>(已含阻尼)。`
-      : `模型<b>略為保守</b>:建議 σ 由 ${RUN_SIGMA.toFixed(2)} 調至 <b>${best.toFixed(2)}</b>(已含阻尼)。`;
+    const mErr=samples.reduce((s,x)=>s+Math.abs(x.actM-x.m*MARGIN_K),0)/samples.length;
+    const total=mergeLedger(samples.map(x=>({id:x.id,d:x.d,aw:x.aw,hm:x.hm,
+      m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0})));
+    const changes=[];
+    if(Math.abs(nk-MARGIN_K)>0.005)changes.push(`K:${MARGIN_K.toFixed(2)}→${nk.toFixed(2)}(分差${nk>MARGIN_K?'放大':'收縮'})`);
+    if(Math.abs(best-RUN_SIGMA)>0.01)changes.push(`σ:${RUN_SIGMA.toFixed(2)}→${best.toFixed(2)}`);
+    const verdict=changes.length?`建議調整 ${changes.join('、')}(均含阻尼)。`:`目前 K=${MARGIN_K.toFixed(2)}、σ=${RUN_SIGMA.toFixed(2)} 已是最誠實設定,不需調整。`;
     out.innerHTML=`
       <div style="margin-bottom:8px">回測 ${days} 天、共 <b>${samples.length}</b> 場(另 ${skipped} 場資料不足):
-        命中率 <b>${(hitRate*100).toFixed(1)}%</b>、平均分差誤差 <b>${mErr.toFixed(1)} 分</b>、Brier ${curB.toFixed(4)} → ${bestB.toFixed(4)}。</div>
+        命中率 <b>${(hitRate*100).toFixed(1)}%</b>、分差平均誤差 <b>${mErr.toFixed(2)} 分</b>、Brier ${curB.toFixed(4)} → ${bestB.toFixed(4)}。紀錄簿累計 ${total} 場。</div>
+      <div class="pos-group">勝率信心 vs 實際</div>
       <div class="table-wrap"><table class="stat" style="min-width:420px">
         <tr><th>模型信心</th><th>場數</th><th>平均信心</th><th>實際命中</th><th>偏差</th></tr>${rows}</table></div>
+      <div class="pos-group">分差段位 vs 實際</div>
+      <div class="table-wrap"><table class="stat" style="min-width:480px">
+        <tr><th>預測分差</th><th>場數</th><th>隱含勝率</th><th>實際勝率</th><th>預測均差</th><th>實際均差</th></tr>${mrows}</table></div>
       <div style="margin-top:10px">${verdict}</div>
       <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
-        ${Math.abs(best-RUN_SIGMA)>0.01?`<button class="today-btn" id="calibApply" style="color:var(--amber);border-color:rgba(255,194,71,.5)">套用 σ=${best.toFixed(2)}</button>`:''}
-        ${Math.abs(RUN_SIGMA-4.3)>0.01?`<button class="today-btn" id="calibReset">還原預設 4.30</button>`:''}
+        ${changes.length?`<button class="today-btn" id="calibApply" style="color:var(--amber);border-color:rgba(255,194,71,.5)">套用建議</button>`:''}
+        ${(Math.abs(RUN_SIGMA-4.3)>0.01||Math.abs(MARGIN_K-1)>0.005)?`<button class="today-btn" id="calibReset">還原預設</button>`:''}
       </div>
-      <div class="tag" style="margin-top:8px">每天第一次開站會自動背景校準並套用(含阻尼);此處為完整報告與手動控制。偏差綠=誠實(±4%)、黃=輕微、紅=明顯。</div>`;
+      <div class="tag" style="margin-top:8px">K=分差係數(校正比分刻度)、σ=勝率鈍感度(校正信心刻度);每天首開自動校準並套用。「實際均差」為實際分差在預測方向上的平均——與「預測均差」越接近,比分越可信。</div>`;
     const ap=$('calibApply');
     if(ap)ap.addEventListener('click',()=>{
+      MARGIN_K=nk;localStorage.setItem('mlb_mk',String(nk));
       RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));
-      pushCalibHist({d:etToday(),s:+best.toFixed(2),hit:+(hitRate*100).toFixed(1),n:samples.length});
+      pushCalibHist({d:etToday(),s:+best.toFixed(2),k:+nk.toFixed(2),hit:+(hitRate*100).toFixed(1),n:samples.length});
       ap.textContent='已套用 ✓';ap.disabled=true;renderCalibHist();loadDay();
     });
     const rs=$('calibReset');
     if(rs)rs.addEventListener('click',()=>{
       RUN_SIGMA=4.3;localStorage.removeItem('mlb_sigma');
+      MARGIN_K=1.0;localStorage.removeItem('mlb_mk');
       rs.textContent='已還原 ✓';rs.disabled=true;loadDay();
     });
     renderCalibHist();
@@ -1353,11 +1426,144 @@ $('calibRun').addEventListener('click',async()=>{
   calibRunning=false;
 });
 
-const dp=$('datePick');dp.value=etToday();
-$('loadBtn').addEventListener('click',loadDay);
-$('prevBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,-1);loadDay();});
-$('nextBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,1);loadDay();});
-$('todayBtn').addEventListener('click',()=>{dp.value=etToday();loadDay();});
+/* ---------- 背景主題(動畫粒子) ---------- */
+const THEMES=[
+  {id:'night',emoji:'🌙',name:'夜場經典',pal:{field:'#0c1a2b',panel:'#14283d',panel2:'#1a3149',glow:'#163150',amber:'#ffc247',teal:'#4ecac1'}},
+  {id:'fireworks',emoji:'🎆',name:'滿貫煙火',pal:{field:'#0a1020',panel:'#131c33',panel2:'#182342',glow:'#1a2a55',amber:'#ffcf5c',teal:'#7ab8ff'}},
+  {id:'dusk',emoji:'🌇',name:'黃昏開球',pal:{field:'#1d1226',panel:'#2b1b33',panel2:'#35213d',glow:'#5a2b3f',amber:'#ffd27d',teal:'#ffab76'}},
+  {id:'storm',emoji:'⛈️',name:'雷雨延賽',pal:{field:'#0b1119',panel:'#141d29',panel2:'#1a2533',glow:'#22303f',amber:'#ffe08a',teal:'#7fd4e8'}},
+  {id:'neon',emoji:'🌆',name:'霓虹球場',pal:{field:'#0d0a1a',panel:'#171130',panel2:'#1e1740',glow:'#2a1458',amber:'#ff6ec7',teal:'#00e5ff'}}];
+let fxTheme=localStorage.getItem('mlb_theme')||'night';
+if(!THEMES.some(t=>t.id===fxTheme))fxTheme='night';
+const fxCanvas=document.getElementById('fx');
+const fxCtx=fxCanvas.getContext('2d');
+let fxParts=[],fxRAF=null,fxLast=0;
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function fxResize(){fxCanvas.width=innerWidth;fxCanvas.height=innerHeight;}
+addEventListener('resize',fxResize);fxResize();
+function rnd(a,b){return a+Math.random()*(b-a);}
+
+let rockets=[],sparks=[],rocketT=0,flashT=0,flashNext=0,streak=null,streakT=0;
+const FW_COLORS=['255,207,92','122,184,255','255,143,163','170,255,190','230,190,255'];
+function fxInit(){
+  fxParts=[];rockets=[];sparks=[];rocketT=0;flashT=0;flashNext=rnd(3,7);streak=null;streakT=rnd(4,8);
+  const n=Math.min(90,Math.round(innerWidth*innerHeight/16000));
+  if(fxTheme==='dusk'){
+    for(let i=0;i<n;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
+      r:rnd(1,3.2),vx:rnd(4,14),vy:-rnd(2,8),o:rnd(.1,.38),tw:rnd(0,6.28)});
+  }else if(fxTheme==='storm'){
+    for(let i=0;i<n*1.6;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
+      vy:rnd(560,920),vx:-rnd(30,80),o:rnd(.1,.28)});
+  }else if(fxTheme==='neon'){
+    for(let i=0;i<n*.8;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
+      r:rnd(1.5,4),vx:rnd(-10,10),vy:rnd(-6,6),o:rnd(.12,.4),
+      c:Math.random()<.5?'255,110,199':'0,229,255',tw:rnd(0,6.28)});
+  }
+}
+function fxTick(t){
+  const dt=Math.min(.05,(t-fxLast)/1000||.016);fxLast=t;
+  const W=fxCanvas.width,H=fxCanvas.height;
+  fxCtx.clearRect(0,0,W,H);
+  if(fxTheme==='fireworks'){
+    rocketT-=dt;
+    if(rocketT<=0){rockets.push({x:rnd(W*.15,W*.85),y:H+8,vy:-rnd(H*.55,H*.8),
+      ty:rnd(H*.18,H*.42),c:FW_COLORS[Math.floor(rnd(0,FW_COLORS.length))]});rocketT=rnd(1.6,3.6);}
+    rockets=rockets.filter(r=>{
+      r.y+=r.vy*dt;
+      fxCtx.fillStyle=`rgba(${r.c},.5)`;
+      fxCtx.beginPath();fxCtx.arc(r.x,r.y,2,0,6.28);fxCtx.fill();
+      fxCtx.strokeStyle=`rgba(${r.c},.18)`;fxCtx.lineWidth=1.4;
+      fxCtx.beginPath();fxCtx.moveTo(r.x,r.y);fxCtx.lineTo(r.x,r.y+18);fxCtx.stroke();
+      if(r.y<=r.ty){
+        const cnt=Math.floor(rnd(38,64));
+        for(let i=0;i<cnt;i++){const a=rnd(0,6.28),sp=rnd(50,170);
+          sparks.push({x:r.x,y:r.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+            life:rnd(.8,1.6),max:1.6,c:r.c});}
+        return false;
+      }
+      return true;
+    });
+    sparks=sparks.filter(s=>{
+      s.life-=dt;if(s.life<=0)return false;
+      s.vy+=70*dt;s.x+=s.vx*dt;s.y+=s.vy*dt;
+      const o=Math.min(.5,(s.life/s.max)*.55);
+      fxCtx.fillStyle=`rgba(${s.c},${o})`;
+      fxCtx.beginPath();fxCtx.arc(s.x,s.y,1.6,0,6.28);fxCtx.fill();
+      return true;
+    });
+  }else if(fxTheme==='dusk'){
+    fxParts.forEach(p=>{
+      p.tw+=dt*1.5;p.x+=p.vx*dt;p.y+=p.vy*dt;
+      if(p.x>W+8)p.x=-8;if(p.y<-8){p.y=H+8;p.x=rnd(0,W);}
+      const o=p.o*(0.65+0.35*Math.sin(p.tw));
+      const g=fxCtx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3);
+      g.addColorStop(0,`rgba(255,190,120,${o})`);g.addColorStop(1,'rgba(255,190,120,0)');
+      fxCtx.fillStyle=g;fxCtx.beginPath();fxCtx.arc(p.x,p.y,p.r*3,0,6.28);fxCtx.fill();
+    });
+  }else if(fxTheme==='storm'){
+    fxCtx.strokeStyle='rgba(170,200,230,.001)';
+    fxParts.forEach(p=>{
+      p.y+=p.vy*dt;p.x+=p.vx*dt;
+      if(p.y>H+20){p.y=-20;p.x=rnd(0,W+80);}
+      const len=p.vy*.022;
+      fxCtx.strokeStyle=`rgba(170,200,230,${p.o})`;fxCtx.lineWidth=1;
+      fxCtx.beginPath();fxCtx.moveTo(p.x,p.y);fxCtx.lineTo(p.x+p.vx*.02,p.y+len);fxCtx.stroke();
+    });
+    flashNext-=dt;
+    if(flashNext<=0&&flashT<=0){flashT=.32;flashNext=rnd(4,9);}
+    if(flashT>0){
+      flashT-=dt;
+      const pr=flashT/.32;
+      const flick=(pr>.75||((pr<.5)&&(pr>.3)))?1:0.25;
+      const o=Math.min(.22,.22*pr*flick);
+      fxCtx.fillStyle=`rgba(215,230,255,${o})`;fxCtx.fillRect(0,0,W,H);
+    }
+  }else if(fxTheme==='neon'){
+    fxParts.forEach(p=>{
+      p.tw+=dt*2.2;p.x+=p.vx*dt;p.y+=p.vy*dt;
+      if(p.x<-10)p.x=W+10;if(p.x>W+10)p.x=-10;
+      if(p.y<-10)p.y=H+10;if(p.y>H+10)p.y=-10;
+      const o=p.o*(0.6+0.4*Math.sin(p.tw));
+      const g=fxCtx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3.2);
+      g.addColorStop(0,`rgba(${p.c},${o})`);g.addColorStop(1,`rgba(${p.c},0)`);
+      fxCtx.fillStyle=g;fxCtx.beginPath();fxCtx.arc(p.x,p.y,p.r*3.2,0,6.28);fxCtx.fill();
+    });
+    streakT-=dt;
+    if(streakT<=0&&!streak){streak={x:-W*.2,y:rnd(H*.15,H*.85),v:rnd(W*.9,W*1.4),
+      c:Math.random()<.5?'255,110,199':'0,229,255'};streakT=rnd(5,9);}
+    if(streak){
+      streak.x+=streak.v*dt;
+      const g=fxCtx.createLinearGradient(streak.x-W*.18,streak.y,streak.x,streak.y);
+      g.addColorStop(0,`rgba(${streak.c},0)`);g.addColorStop(1,`rgba(${streak.c},.35)`);
+      fxCtx.strokeStyle=g;fxCtx.lineWidth=2;
+      fxCtx.beginPath();fxCtx.moveTo(streak.x-W*.18,streak.y);fxCtx.lineTo(streak.x,streak.y);fxCtx.stroke();
+      if(streak.x-W*.18>W)streak=null;
+    }
+  }
+  fxRAF=requestAnimationFrame(fxTick);
+}
+function applyTheme(id){
+  fxTheme=id;localStorage.setItem('mlb_theme',id);
+  const th=THEMES.find(t=>t.id===id)||THEMES[0];
+  const r=document.documentElement.style;
+  r.setProperty('--field',th.pal.field);
+  r.setProperty('--panel',th.pal.panel);
+  r.setProperty('--panel-2',th.pal.panel2);
+  r.setProperty('--glow-top',th.pal.glow);
+  r.setProperty('--amber',th.pal.amber);
+  r.setProperty('--teal',th.pal.teal);
+  document.querySelectorAll('.theme-b').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
+  cancelAnimationFrame(fxRAF);fxRAF=null;
+  fxCtx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
+  if(id==='night'||reduceMotion)return;
+  fxInit();fxLast=0;fxRAF=requestAnimationFrame(fxTick);
+}
+const tb=document.getElementById('themeBar');
+tb.innerHTML='<span style="font-family:var(--cond);letter-spacing:.1em;font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:600">背景</span>'
+  +THEMES.map(t=>`<button class="theme-b" data-t="${t.id}" title="${t.name}">${t.emoji}</button>`).join('');
+tb.querySelectorAll('.theme-b').forEach(b=>b.addEventListener('click',()=>applyTheme(b.dataset.t)));
+applyTheme(fxTheme);
+
 dp.addEventListener('change',loadDay);
 loadDay().then(()=>autoCalibrate());
 </script>
