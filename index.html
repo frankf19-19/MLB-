@@ -275,6 +275,7 @@
       <button class="nav" id="nextBtn" title="後一天">▶</button>
       <button class="today-btn" id="todayBtn">今天</button>
       <button class="today-btn" id="calibBtn">模型體檢</button>
+      <button class="today-btn" id="standBtn">戰績榜</button>
       <button class="btn" id="loadBtn"><span class="ico">⟳</span><span>載入</span></button>
     </div>
     <div id="themeBar"></div>
@@ -338,6 +339,14 @@
     </section>
   </div>
 
+  <div id="standView" class="hidden">
+    <section>
+      <div class="sec-head"><h2>戰績榜</h2><span class="tag" id="standTag"></span>
+        <button class="back" id="stBackBtn">← 回比賽</button></div>
+      <div id="standings"><div class="empty">載入中…</div></div>
+    </section>
+  </div>
+
   <div id="gameView" class="hidden">
     <section>
       <div class="sec-head"><h2>Gameday</h2><span class="tag" id="gdTag"></span>
@@ -346,7 +355,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.0</footer>
 </div>
 
 <script>
@@ -1210,6 +1219,7 @@ function showView(v){
   $('teamView').classList.toggle('hidden',v!=='team');
   $('playerView').classList.toggle('hidden',v!=='player');
   $('gameView').classList.toggle('hidden',v!=='game');
+  $('standView').classList.toggle('hidden',v!=='stand');
   if(v!=='game')stopGameTimer();
 }
 $('backBtn').addEventListener('click',()=>showView('home'));
@@ -1425,6 +1435,52 @@ $('calibRun').addEventListener('click',async()=>{
   }
   calibRunning=false;
 });
+
+/* ---------- 戰績榜(即時) ---------- */
+const DIV_ORDER=[[201,'美聯東區'],[202,'美聯中區'],[200,'美聯西區'],
+                 [204,'國聯東區'],[205,'國聯中區'],[203,'國聯西區']];
+async function showStandings(){
+  lastView='home';showView('stand');
+  $('standings').innerHTML='<div class="empty">載入最新戰績…</div>';
+  try{
+    const season=+etToday().slice(0,4);
+    const d=await jget(`${API}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason&hydrate=division,team`);
+    const byDiv={};
+    (d.records||[]).forEach(rec=>{
+      const did=rec.division?.id;
+      byDiv[did]={name:rec.division?.nameShort||rec.division?.name,rows:rec.teamRecords||[]};
+    });
+    let html='';
+    DIV_ORDER.forEach(([did,zh])=>{
+      const dv=byDiv[did];if(!dv)return;
+      const rows=dv.rows.map((t,i)=>{
+        const last10=(t.records?.splitRecords||[]).find(s=>s.type==='lastTen');
+        const l10=last10?`${last10.wins}-${last10.losses}`:'-';
+        const rd=t.runDifferential??((t.runsScored!=null&&t.runsAllowed!=null)?t.runsScored-t.runsAllowed:null);
+        const streak=t.streak?.streakCode||'-';
+        const zhStreak=streak.startsWith('W')?streak.replace('W','')+'連勝':streak.startsWith('L')?streak.replace('L','')+'連敗':streak;
+        const lead=i===0;
+        return `<tr>
+          <td><span class="pnm" data-team="${t.team.id}" style="cursor:pointer;${lead?'color:var(--amber);font-weight:700':''}">${esc(t.team.name)}</span></td>
+          <td>${t.wins}</td><td>${t.losses}</td>
+          <td>${esc(t.winningPercentage||'')}</td>
+          <td>${esc(t.gamesBack==='-'?'—':t.gamesBack)}</td>
+          <td style="color:${rd>0?'var(--hit)':rd<0?'var(--miss)':'var(--muted)'}">${rd>0?'+':''}${rd??'-'}</td>
+          <td>${esc(zhStreak)}</td><td>${esc(l10)}</td></tr>`;
+      }).join('');
+      html+=`<div class="pos-group">${zh}</div>
+        <div class="table-wrap"><table class="stat" style="min-width:520px">
+        <tr><th>球隊</th><th>勝</th><th>敗</th><th>勝率</th><th>勝差</th><th>得失分差</th><th>目前</th><th>近10場</th></tr>
+        ${rows}</table></div>`;
+    });
+    $('standings').innerHTML=html||'<div class="empty">查無戰績資料。</div>';
+    $('standTag').textContent='即時 · '+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})+'(台灣時間)';
+    $('standings').querySelectorAll('.pnm[data-team]').forEach(el=>{
+      el.addEventListener('click',()=>showTeam(+el.dataset.team,el.textContent));});
+  }catch(e){$('standings').innerHTML=`<div class="empty">戰績載入失敗:${esc(e.message)}</div>`;}
+}
+$('standBtn').addEventListener('click',showStandings);
+$('stBackBtn').addEventListener('click',()=>showView('home'));
 
 /* ---------- 背景主題(動畫粒子) ---------- */
 const THEMES=[
