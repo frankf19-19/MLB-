@@ -231,6 +231,22 @@
   .play-item{border-left:3px solid var(--line);padding:6px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink2)}
   .play-item .pi-inn{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
   .play-item.scoring{border-left-color:var(--amber)}
+  .feed-inn{font-family:var(--cond);font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    font-size:14px;color:var(--muted);margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .feed{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:6px 0}
+  .fplay{display:flex;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);align-items:flex-start}
+  .fplay:last-child{border-bottom:none}
+  .fplay .fava{width:38px;height:38px;border-radius:50%;flex:0 0 38px;object-fit:cover;background:var(--panel-2);border:1px solid var(--line)}
+  .fplay .fbody{flex:1;min-width:0}
+  .ftag{display:inline-block;font-family:var(--cond);font-weight:700;letter-spacing:.05em;font-size:12px;
+    padding:2px 9px;border-radius:6px;margin-bottom:3px}
+  .ftag.out{background:rgba(239,95,95,.14);color:var(--miss);border:1px solid rgba(239,95,95,.35)}
+  .ftag.hit{background:rgba(78,202,193,.14);color:var(--teal);border:1px solid rgba(78,202,193,.4)}
+  .ftag.score{background:rgba(255,194,71,.16);color:var(--amber);border:1px solid rgba(255,194,71,.4)}
+  .ftag.neutral{background:var(--wash);color:var(--muted);border:1px solid var(--line)}
+  .fplay .fdesc{font-size:13.5px;color:var(--ink2);line-height:1.5}
+  .fplay .fpit{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:2px}
+  .fplay .fcount{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;text-align:right}
   @keyframes basepulse{0%,100%{opacity:1}50%{opacity:.5}}
   .base-on{animation:basepulse 1.4s ease-in-out infinite}
 
@@ -377,7 +393,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.3</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.4</footer>
 </div>
 
 <script>
@@ -1168,6 +1184,39 @@ function fieldStateHtml(ls,batter,pitcher){
       </div>
     </div>`;
 }
+function playFeedHtml(allPlays){
+  const plays=(allPlays||[]).filter(p=>p.result?.description).slice(-18).reverse();
+  if(!plays.length)return '';
+  let html='<div class="pos-group">逐打席紀錄</div>',lastHalf=null;
+  plays.forEach(p=>{
+    const ab=p.about||{},res=p.result||{},mu=p.matchup||{};
+    const halfKey=`${ab.inning}-${ab.halfInning}`;
+    if(halfKey!==lastHalf){
+      html+=`</div><div class="feed-inn">${ab.inning}局${ab.halfInning==='top'?'上':'下'}</div><div class="feed">`;
+      lastHalf=halfKey;
+    }
+    const ev=(res.eventType||'').toLowerCase(), desc=res.description||res.event||'';
+    let cls='neutral';
+    if(ab.isScoringPlay)cls='score';
+    else if(/strikeout|_out|out|grounded|flyout|pop|lineout|force|double_play|field_error/.test(ev)||/out/i.test(res.event||''))cls='out';
+    else if(/single|double|triple|home_run|hit_by_pitch|walk/.test(ev))cls='hit';
+    // 末球資訊
+    const pitches=(p.playEvents||[]).filter(e=>e.isPitch);
+    const last=pitches[pitches.length-1];
+    const pinfo=last?`${last.details?.type?.description?esc(last.details.type.description)+' · ':''}${last.pitchData?.startSpeed?last.pitchData.startSpeed.toFixed(1)+' mph':''}`:'';
+    const bid=mu.batter?.id;
+    html+=`<div class="fplay">
+      ${bid?avatarImg(bid,mu.batter?.fullName,'fava'):''}
+      <div class="fbody">
+        <span class="ftag ${cls}">${esc(res.event||'—')}</span>
+        <div class="fdesc">${esc(desc)}</div>
+        ${pinfo?`<div class="fpit">${pinfo}</div>`:''}
+      </div>
+      <div class="fcount">${ab.isComplete&&res.rbi?('打點 '+res.rbi):''}</div>
+    </div>`;
+  });
+  return html+'</div>';
+}
 function boxTable(side,box){
   const t=box.teams?.[side]; if(!t)return '';
   // 完整出賽名單:batters 含先發、代打、代跑、被換下的所有人
@@ -1247,11 +1296,7 @@ async function loadGame(gid){
         <div class="zone-box">${zoneSvg(events)}</div>
         <div class="pitchlist">${pitchRows}</div>
       </div>`:'';
-    const plays=(ld.plays?.allPlays||[]).filter(p=>p.result?.description).slice(-8).reverse();
-    const playsHtml=plays.length?`<div class="pos-group">最近事件</div>`+plays.map(p=>`
-      <div class="play-item ${p.about?.isScoringPlay?'scoring':''}">
-        <div class="pi-inn">${p.about?.inning??''}局${p.about?.halfInning==='top'?'上':'下'}${p.about?.isScoringPlay?' · 得分':''}</div>
-        ${esc(p.result.description)}</div>`).join(''):'';
+    const playsHtml='';
     const boxes=boxTable('away',box)+boxTable('home',box);
     $('gdTag').textContent=st==='Live'?'每 20 秒自動更新':'';
     $('gameDetail').innerHTML=`
@@ -1272,7 +1317,10 @@ async function loadGame(gid){
         return `<div class="why" style="margin-top:14px"><span class="k" style="color:var(--amber)">即時戰況</span>${esc(lead2)},依比分與剩餘局數估算主隊勝率約 ${(lw.p*100).toFixed(0)}%。</div>`;
       })():''}
       ${st==='Live'?fieldStateHtml(ls,bat,pit):''}
-      ${duel}${zone}${playsHtml}${boxes}`;
+      ${duel}${zone}
+      ${playFeedHtml(ld.plays?.allPlays)}
+      ${boxes}`;
+    bindPlayerClicks($('gameDetail'));
     bindPlayerClicks($('gameDetail'));
     $('gameDetail').querySelectorAll('.gnm[data-team]').forEach(el=>{
       el.addEventListener('click',()=>showTeam(+el.dataset.team,el.textContent));});
