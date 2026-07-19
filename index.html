@@ -373,7 +373,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.5</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.6</footer>
 </div>
 
 <script>
@@ -1091,18 +1091,32 @@ function zoneSvg(events){
 }
 function boxTable(side,box){
   const t=box.teams?.[side]; if(!t)return '';
-  const order=t.battingOrder||[];
-  if(!order.length)return '';
-  const rows=order.map(id=>{
-    const pl=t.players?.['ID'+id]; if(!pl)return '';
+  // 完整出賽名單:batters 含先發、代打、代跑、被換下的所有人
+  const ids=(t.batters&&t.batters.length)?t.batters:(t.battingOrder||[]);
+  if(!ids.length)return '';
+  const entries=ids.map(id=>t.players?.['ID'+id]).filter(Boolean)
+    .filter(pl=>{
+      const b=pl.stats?.batting||{};
+      return (b.plateAppearances>0)||(b.atBats>0)||(b.baseOnBalls>0)||(b.hitByPitch>0)
+        ||(b.sacFlies>0)||(b.sacBunts>0)||(b.runs>0)||(b.stolenBases>0);
+    });
+  // 依棒次排序:battingOrder 如 "400"=第4棒先發、"401"=第4棒第一位替補
+  entries.sort((a,b)=>(parseInt(a.battingOrder)||999)-(parseInt(b.battingOrder)||999));
+  if(!entries.length)return '';
+  const rows=entries.map(pl=>{
     const b=pl.stats?.batting||{},s=pl.seasonStats?.batting||{};
-    if(b.atBats==null&&!b.plateAppearances)return '';
-    return `<tr><td><span class="pnm" data-pid="${pl.person.id}" style="cursor:pointer">${esc(pl.person.fullName)}</span></td>
-      <td>${esc(pl.position?.abbreviation||'')}</td>
+    const bo=parseInt(pl.battingOrder)||0;
+    const isSub=bo%100!==0;
+    const pos=(pl.allPositions&&pl.allPositions.length)
+      ? pl.allPositions.map(p=>p.abbreviation).join('-')
+      : (pl.position?.abbreviation||'');
+    const nm=`<span class="pnm" data-pid="${pl.person.id}" style="cursor:pointer;${isSub?'color:var(--muted)':''}">${isSub?'↳ ':''}${esc(pl.person.fullName)}</span>`;
+    return `<tr${isSub?' style="opacity:.85"':''}><td>${nm}</td>
+      <td>${esc(pos)}</td>
       <td>${b.atBats??0}</td><td>${b.runs??0}</td><td>${b.hits??0}</td><td>${b.rbi??0}</td>
       <td>${b.baseOnBalls??0}</td><td>${b.strikeOuts??0}</td><td>${s.avg??'-'}</td><td>${s.ops??'-'}</td></tr>`;
   }).join('');
-  return `<div class="pos-group">${esc(t.team?.name||side)} 打擊</div><div class="table-wrap"><table class="stat">
+  return `<div class="pos-group">${esc(t.team?.name||side)} 打擊(含替補與被換下)</div><div class="table-wrap"><table class="stat">
     <tr><th>打者</th><th>位</th><th>AB</th><th>R</th><th>H</th><th>RBI</th><th>BB</th><th>K</th><th>AVG</th><th>OPS</th></tr>
     ${rows}</table></div>`;
 }
