@@ -181,7 +181,16 @@
   .badge.star{background:rgba(255,194,71,.15);color:var(--amber);border:1px solid rgba(255,194,71,.45)}
   .badge.pot{background:rgba(126,201,111,.13);color:var(--grow);border:1px solid rgba(126,201,111,.4)}
   .p-stats{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:4px}
-  .p-sw{font-size:13px;line-height:1.6;margin-top:6px}
+  .p-sw{font-size:13px;line-height:1.7;margin-top:7px}
+  .chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12.5px;margin:2px 5px 2px 0;white-space:nowrap}
+  .chip.s{background:rgba(78,202,193,.12);color:var(--teal);border:1px solid rgba(78,202,193,.4)}
+  .chip.w{background:rgba(239,95,95,.1);color:var(--miss);border:1px solid rgba(239,95,95,.38)}
+  .chip.n{background:rgba(130,153,172,.1);color:var(--muted);border:1px solid var(--line)}
+  .pitchbar{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:13px}
+  .pitchbar .pt{min-width:110px;white-space:nowrap}
+  .pitchbar .bar{flex:1;height:9px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+  .pitchbar .bar i{display:block;height:100%;background:var(--teal);border-radius:5px}
+  .pitchbar .pv{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:120px;text-align:right}
   .p-sw .sk{color:var(--teal);font-weight:700;margin-right:6px}
   .p-sw .wk{color:var(--miss);font-weight:700;margin:0 6px 0 12px}
   /* Gameday 視圖 */
@@ -301,7 +310,7 @@
           <button class="today-btn" id="calibRun" style="color:var(--teal);border-color:rgba(78,202,193,.5)">開始體檢</button>
           <span class="tag" id="calibProg"></span>
         </div>
-        <div id="calibOut" style="font-size:14px">按「開始體檢」,會逐日重算過去的預測並跟實際結果比對:檢查模型說 60% 時是否真的中六成、預期分差誤差多大,並自動找出最誠實的勝率換算參數(σ)。跑 14 天約需 10~20 秒。</div>
+        <div id="calibOut" style="font-size:14px">✅ 校準是全自動的:每天第一次開站會背景回測近 14 天,自動修正 K(分差刻度)與 σ(信心刻度)並立即套用,結果記在下方履歷。這裡的「開始體檢」是看完整報告用的:信心分桶、分差段位、紀錄簿統計,以及手動微調。跑 14 天約需 10~20 秒。</div>
         <div id="calibHist"></div>
       </div>
     </section>
@@ -355,7 +364,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.1</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.2</footer>
 </div>
 
 <script>
@@ -659,6 +668,7 @@ function gameCard(g,p,rv){
   return `<div class="game ${isFinal?'done':''}">
     <div class="g-top">${teamsHtml}${pill}${gdayBtn}</div>
     ${meta?`<div class="meta">${meta}</div>`:''}
+    <div class="meta" id="h2h-${g.id}"></div>
     ${liveRow}
     ${predLine}
     <div class="prob"><div class="prob-bar"><div class="away" style="width:${ap}%"></div><div class="home" style="width:${hp}%"></div></div>
@@ -776,6 +786,7 @@ async function loadDay(quiet){
       +(refreshTimer?' · 🔴 每 45 秒自動更新':'');
     bindTeamClicks();
     loadTransactions(date);
+    loadH2H(games,season);
     const summary=buildDailySummary(date,games,curPreds,reviews,{hits,errSum,errN});
     $('aiText').textContent=summary;
     $('aiSec').classList.toggle('hidden',!summary);
@@ -796,13 +807,21 @@ function evalHitter(st,age){
   const hr=+st.homeRuns||0,sb=+st.stolenBases||0,so=+st.strikeOuts||0;
   const kRate=pa? so/pa : 0;
   const S=[],W=[];
-  if(avg>=.300)S.push(`打擊精準(AVG ${st.avg})`);
-  if(slg>=.500)S.push(`長打火力(SLG ${st.slg}、${hr} 轟)`); else if(hr>=15)S.push(`全壘打產能(${hr} 轟)`);
-  if(obp-avg>=.070)S.push(`選球出色(OBP ${st.obp})`);
-  if(sb>=15)S.push(`速度威脅(${sb} 盜)`);
-  if(kRate>=.28&&pa>=80)W.push(`三振偏多(K 率 ${(kRate*100).toFixed(0)}%)`);
+  const iso=slg-avg;
+  if(hr>=20&&sb>=20)S.push(`20-20 全能身手(${hr} 轟 ${sb} 盜)`);
+  if(iso>=.230&&pa>=100)S.push(`長打暴力(ISO ${iso.toFixed(3)})`);
+  else if(slg>=.500)S.push(`長打火力(SLG ${st.slg}、${hr} 轟)`);
+  else if(hr>=15)S.push(`全壘打產能(${hr} 轟)`);
+  if(obp>=.380&&pa>=100)S.push(`上壘機器(OBP ${st.obp})`);
+  else if(obp-avg>=.070)S.push(`選球出色(OBP ${st.obp})`);
+  if(kRate<=.14&&avg>=.270&&pa>=100)S.push(`接觸型打者(K率僅 ${(kRate*100).toFixed(0)}%)`);
+  else if(avg>=.300)S.push(`打擊精準(AVG ${st.avg})`);
+  if(sb>=25)S.push(`頂級速度(${sb} 盜)`);else if(sb>=15)S.push(`速度威脅(${sb} 盜)`);
+  if((+st.rbi||0)>=70)S.push(`火力核心(${st.rbi} 打點)`);
+  if(kRate>=.28&&pa>=80)W.push(`三振偏多(K率 ${(kRate*100).toFixed(0)}%)`);
   if(avg<.230&&pa>=80)W.push(`打擊率偏低(${st.avg})`);
   if(slg<.360&&pa>=80)W.push(`缺乏長打(SLG ${st.slg})`);
+  if(obp<.290&&pa>=80)W.push(`不易上壘(OBP ${st.obp})`);
   if(!S.length&&pa>=80)S.push(`攻擊指數 OPS ${(ops).toFixed(3)}`);
   const star=pa>=100&&ops>=.850, pot=age!=null&&age<=25&&pa>=60&&ops>=.740;
   const line=`AVG ${st.avg||'-'} / OBP ${st.obp||'-'} / SLG ${st.slg||'-'} · ${hr} HR · ${st.rbi||0} RBI · ${sb} SB · ${pa} PA`;
@@ -815,13 +834,19 @@ function evalPitcher(st,age){
   const k9=ip?(+st.strikeOuts||0)*9/ip:0, bb9=ip?(+st.baseOnBalls||0)*9/ip:0, hr9=ip?(+st.homeRuns||0)*9/ip:0;
   const sv=+st.saves||0;
   const S=[],W=[];
-  if(era<=3.20&&ip>=30)S.push(`壓制力強(ERA ${st.era})`);
-  if(k9>=9.5&&ip>=20)S.push(`三振能力(K/9 ${k9.toFixed(1)})`);
-  if(bb9<=2.2&&ip>=20)S.push(`控球精準(BB/9 ${bb9.toFixed(1)})`);
-  if(whip<=1.10&&ip>=30)S.push(`壓制上壘(WHIP ${st.whip})`);
-  if(sv>=10)S.push(`守護神(${sv} 次救援)`);
+  const gb=parseFloat(st.groundOutsToAirouts);
+  if(era<=2.60&&ip>=60)S.push(`王牌等級(ERA ${st.era}、${ip} IP)`);
+  else if(era<=3.20&&ip>=30)S.push(`壓制力強(ERA ${st.era})`);
+  if(k9>=11&&ip>=20)S.push(`三振機器(K/9 ${k9.toFixed(1)})`);
+  else if(k9>=9.5&&ip>=20)S.push(`三振能力(K/9 ${k9.toFixed(1)})`);
+  if(bb9<=1.8&&ip>=30)S.push(`控球大師(BB/9 ${bb9.toFixed(1)})`);
+  else if(bb9<=2.2&&ip>=20)S.push(`控球精準(BB/9 ${bb9.toFixed(1)})`);
+  if(whip<=1.05&&ip>=30)S.push(`壓制上壘(WHIP ${st.whip})`);
+  if(isFinite(gb)&&gb>=1.6&&ip>=30)S.push(`滾地球製造機(GO/AO ${gb.toFixed(1)})`);
+  if(sv>=20)S.push(`終結者(${sv} 次救援)`);else if(sv>=10)S.push(`守護神(${sv} 次救援)`);
   if(bb9>=4.0&&ip>=20)W.push(`控球不穩(BB/9 ${bb9.toFixed(1)})`);
   if(hr9>=1.5&&ip>=20)W.push(`易被開轟(HR/9 ${hr9.toFixed(1)})`);
+  if(isFinite(gb)&&gb<=0.75&&hr9>=1.2&&ip>=30)W.push(`飛球型、吃球場(GO/AO ${gb.toFixed(1)})`);
   if(era>=5.0&&ip>=30)W.push(`防禦率偏高(${st.era})`);
   if(!S.length&&ip>=20)S.push(`ERA ${st.era}、WHIP ${st.whip}`);
   const star=(ip>=40&&era<=3.30)||sv>=15, pot=age!=null&&age<=25&&ip>=20&&era<=4.20;
@@ -836,6 +861,14 @@ function avatarImg(pid,name,cls){
   return `<img class="${cls}" src="${headshot(pid,cls==='sr-ava'?68:120)}" alt="" loading="lazy"
     onerror="this.outerHTML='<div class=&quot;${cls} avatar ph&quot;>${esc(initials(name))}</div>'">`;
 }
+function swChips(ev){
+  let out='<div class="p-sw">';
+  ev.S.forEach(s=>out+=`<span class="chip s">💪 ${esc(s)}</span>`);
+  ev.W.forEach(w=>out+=`<span class="chip w">⚠ ${esc(w)}</span>`);
+  if(!ev.S.length&&!ev.W.length)out+='<span class="chip n">樣本不足,暫不評述</span>';
+  if(ev.small)out+='<span class="chip n">樣本較小,僅供參考</span>';
+  return out+'</div>';
+}
 function playerCard(entry){
   const p=entry.person||{}, pos=entry.position?.abbreviation||p.primaryPosition?.abbreviation||'?';
   const age=p.currentAge;
@@ -846,15 +879,7 @@ function playerCard(entry){
   const badges=[];
   if(ev?.star)badges.push('<span class="badge star">⭐ 主力</span>');
   else if(ev?.pot)badges.push('<span class="badge pot">🌱 潛力</span>');
-  let sw='';
-  if(ev){
-    sw='<div class="p-sw">';
-    if(ev.S.length)sw+=`<span class="sk">強項</span>${esc(ev.S.join(';'))}`;
-    if(ev.W.length)sw+=`<span class="wk">弱項</span>${esc(ev.W.join(';'))}`;
-    if(!ev.S.length&&!ev.W.length)sw+=`<span style="color:var(--muted)">樣本不足,暫不評述</span>`;
-    if(ev.small)sw+=`<span style="color:var(--muted)">(樣本較小,僅供參考)</span>`;
-    sw+='</div>';
-  }
+  const sw=ev?swChips(ev):'';
   return `<div class="player">
     ${avatarImg(p.id,p.fullName,'avatar')}
     <div class="p-body">
@@ -941,6 +966,27 @@ $('searchBox').addEventListener('input',()=>{
     }catch(e){$('searchResults').innerHTML=`<div class="empty">搜尋失敗:${esc(e.message)}</div>`;}
   },300);
 });
+/* ---------- 本季對戰戰績(即時統計) ---------- */
+async function loadH2H(games,season){
+  const jobs=games.map(async g=>{
+    try{
+      const d=await jget(`${API}/schedule?sportId=1&season=${season}&teamId=${g.homeId}&opponentId=${g.awayId}&fields=dates,games,gamePk,status,abstractGameState,teams,away,home,team,id,isWinner`);
+      let hw=0,aw=0;
+      (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(gm=>{
+        if(gm.status?.abstractGameState!=='Final')return;
+        const ids=[gm.teams?.away?.team?.id,gm.teams?.home?.team?.id];
+        if(!ids.includes(g.awayId)||!ids.includes(g.homeId))return;
+        const winId=gm.teams?.home?.isWinner?gm.teams.home.team.id:(gm.teams?.away?.isWinner?gm.teams.away.team.id:null);
+        if(winId===g.homeId)hw++;else if(winId===g.awayId)aw++;
+      }));
+      const el=document.getElementById('h2h-'+g.id);
+      if(!el)return;
+      el.textContent=(hw+aw)?`本季對戰 ${aw}–${hw}(客–主)${hw>aw?' · 主隊佔優':aw>hw?' · 客隊佔優':' · 平手'}`:'本季首次交手';
+    }catch(e){}
+  });
+  await Promise.allSettled(jobs);
+}
+
 /* ---------- 聯盟動態(官方異動 = 真實新聞) ---------- */
 const TX_ZH=[
   [/trade/i,'交易'],[/signed as free agent|signed/i,'簽約'],
@@ -1145,6 +1191,34 @@ function collectRows(p,group){
   });
   return rows;
 }
+const PITCH_ZH={FF:'四縫線速球',FA:'速球',SI:'伸卡球',FC:'卡特球',SL:'滑球',ST:'橫掃球',
+  CU:'曲球',KC:'彈指曲球',CS:'慢速曲球',CH:'變速球',FS:'指叉球',FO:'快指叉',
+  KN:'蝴蝶球',EP:'月亮球',SC:'螺旋球',SV:'滑曲球',SW:'橫掃球'};
+async function fetchArsenal(pid,season){
+  try{
+    const d=await jget(`${API}/people/${pid}/stats?stats=pitchArsenal&group=pitching&season=${season}`);
+    const sp=(d.stats||[])[0]?.splits||[];
+    const rows=sp.map(s=>{
+      const st=s.stat||{};
+      const code=st.type?.code||'', name=PITCH_ZH[code]||st.type?.description||code;
+      const pct=parseFloat(st.percentage??st.percent);
+      const spd=parseFloat(st.averageSpeed);
+      return {name,pct:isFinite(pct)?(pct>1?pct/100:pct):null,spd:isFinite(spd)?spd:null};
+    }).filter(r=>r.pct!=null&&r.pct>0.005);
+    rows.sort((a,b)=>b.pct-a.pct);
+    return rows;
+  }catch(e){return [];}
+}
+function arsenalHtml(rows){
+  if(!rows.length)return '';
+  return `<div class="pos-group" style="margin-top:14px">球種配置(本季使用率與均速)</div>
+    <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px 16px">
+    ${rows.map(r=>`<div class="pitchbar">
+      <span class="pt">${esc(r.name)}</span>
+      <span class="bar"><i style="width:${Math.round(r.pct*100)}%"></i></span>
+      <span class="pv">${(r.pct*100).toFixed(1)}%${r.spd?` · ${r.spd.toFixed(1)} mph`:''}</span>
+    </div>`).join('')}</div>`;
+}
 async function showPlayer(pid){
   const cur=!$('gameView').classList.contains('hidden')?'game'
     :!$('teamView').classList.contains('hidden')?'team':'home';
@@ -1152,7 +1226,10 @@ async function showPlayer(pid){
   showView('player');
   $('playerDetail').innerHTML='<div class="empty">載入球員生涯資料…</div>';
   try{
-    const d=await jget(`${API}/people?personIds=${pid}&hydrate=currentTeam,stats(group=[hitting,pitching],type=[yearByYear,career])`);
+    const season=+etToday().slice(0,4);
+    const [d,arsenal]=await Promise.all([
+      jget(`${API}/people?personIds=${pid}&hydrate=currentTeam,stats(group=[hitting,pitching],type=[yearByYear,career])`),
+      fetchArsenal(pid,season)]);
     const p=(d.people||[])[0]; if(!p)throw new Error('查無資料');
     const pos=p.primaryPosition?.abbreviation||'?';
     const cm=ftToCm(p.height), kg=p.weight?Math.round(p.weight*0.4536):null;
@@ -1172,10 +1249,7 @@ async function showPlayer(pid){
     else if(seasonEval?.pot)badges.push('<span class="badge pot">🌱 潛力</span>');
     let sw='';
     if(seasonEval&&(seasonEval.S.length||seasonEval.W.length)){
-      sw=`<div class="p-sw" style="margin-top:10px">`;
-      if(seasonEval.S.length)sw+=`<span class="sk">本季強項</span>${esc(seasonEval.S.join(';'))}`;
-      if(seasonEval.W.length)sw+=`<span class="wk">弱項</span>${esc(seasonEval.W.join(';'))}`;
-      sw+='</div>';
+      sw=`<div class="pos-group" style="margin-top:14px">本季強項與弱項</div>`+swChips(seasonEval);
     }
     const hitRows=collectRows(p,'hitting'), pitRows=collectRows(p,'pitching');
     // 投手優先顯示投球表;二刀流兩張都有
@@ -1201,6 +1275,7 @@ async function showPlayer(pid){
         ${bioBox('綽號',p.nickName)}
       </div>
       ${sw}
+      ${arsenalHtml(arsenal)}
       ${tables||'<div class="empty" style="margin-top:12px">查無生涯數據。</div>'}`;
     const tl=$('pdTeam');
     if(tl&&p.currentTeam?.id)tl.addEventListener('click',()=>showTeam(p.currentTeam.id,tn));
