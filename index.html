@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
     --field:#0c1a2b; --panel:#14283d; --panel-2:#1a3149;
@@ -376,7 +377,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.1</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.2</footer>
 </div>
 
 <script>
@@ -1406,10 +1407,37 @@ async function showPlayer(pid,fromPop){
         ${bioBox('綽號',p.nickName)}
       </div>
       ${sw}
+      ${seasonEval&&!isP?'<div class="pos-group" style="margin-top:14px">能力雷達</div><div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;max-width:420px"><canvas id="radarChart" height="240"></canvas></div>':''}
       ${arsenalHtml(arsenal)}
       ${tables||'<div class="empty" style="margin-top:12px">查無生涯數據。</div>'}`;
     const tl=$('pdTeam');
     if(tl&&p.currentTeam?.id)tl.addEventListener('click',()=>showTeam(p.currentTeam.id,tn));
+    // 打者能力雷達(對比聯盟基準)
+    if(!isP&&window.Chart&&document.getElementById('radarChart')){
+      const yr=''+(+etToday().slice(0,4));
+      const hs=(()=>{const s=(p.stats||[]).find(x=>x.group?.displayName==='hitting'&&x.type?.displayName==='yearByYear');
+        const sp=(s?.splits||[]).filter(x=>x.season===yr);return sp.length?sp[sp.length-1].stat:null;})();
+      if(hs){
+        const clamp=(v,lo,hi)=>Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));
+        const avg=+hs.avg||0,obp=+hs.obp||0,slg=+hs.slg||0,hr=+hs.homeRuns||0,sb=+hs.stolenBases||0;
+        const pa=+hs.plateAppearances||1,so=+hs.strikeOuts||0;
+        const vals=[clamp(avg,.2,.32),clamp(obp,.28,.4),clamp(slg,.35,.56),clamp(hr,0,40),clamp(sb,0,35),clamp(1-so/pa,.72,.92)];
+        const css=getComputedStyle(document.documentElement);
+        const teal=css.getPropertyValue('--teal').trim(),muted=css.getPropertyValue('--muted').trim(),line=css.getPropertyValue('--line').trim();
+        const hex2rgba=(hx,a)=>{const c=hx.replace('#','');const n=c.length===3?c.split('').map(x=>x+x).join(''):c;
+          return `rgba(${parseInt(n.slice(0,2),16)},${parseInt(n.slice(2,4),16)},${parseInt(n.slice(4,6),16)},${a})`;};
+        if(window._radarCh)window._radarCh.destroy();
+        window._radarCh=new Chart(document.getElementById('radarChart'),{
+          type:'radar',
+          data:{labels:['打擊率','上壘','長打','全壘打','速度','接觸'],
+            datasets:[{label:esc(p.fullName),data:vals,
+              borderColor:teal,backgroundColor:teal.startsWith('#')?hex2rgba(teal,.2):teal,pointBackgroundColor:teal}]},
+          options:{responsive:true,plugins:{legend:{labels:{color:muted,font:{size:11}}}},
+            scales:{r:{min:0,max:100,ticks:{display:false,stepSize:25},grid:{color:line},angleLines:{color:line},
+              pointLabels:{color:muted,font:{size:11}}}}}
+        });
+      }
+    }
   }catch(e){$('playerDetail').innerHTML=`<div class="empty">載入失敗:${esc(e.message)}</div>`;}
 }
 function bindPlayerClicks(root){
@@ -1466,12 +1494,34 @@ function renderCalibHist(){
   }
   if(h.length){
     html+=`<div class="pos-group" style="margin-top:14px">校準履歷</div>
+      <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;margin-bottom:8px"><canvas id="calibChart" height="150"></canvas></div>
       <div class="table-wrap"><table class="stat" style="min-width:400px">
       <tr><th>日期</th><th>σ</th><th>K</th><th>近14天命中</th><th>樣本</th></tr>
       ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.n}</td></tr>`).join('')}
       </table></div>`;
   }
   el.innerHTML=html;
+  if(h.length&&window.Chart){
+    const hh=calibHist().slice(-20);
+    const css=getComputedStyle(document.documentElement);
+    const amber=css.getPropertyValue('--amber').trim(),teal=css.getPropertyValue('--teal').trim(),muted=css.getPropertyValue('--muted').trim(),line=css.getPropertyValue('--line').trim();
+    if(window._calibCh)window._calibCh.destroy();
+    window._calibCh=new Chart(document.getElementById('calibChart'),{
+      type:'line',
+      data:{labels:hh.map(r=>r.d.slice(5)),datasets:[
+        {label:'命中率%',data:hh.map(r=>r.hit),borderColor:amber,backgroundColor:amber,tension:.3,yAxisID:'y'},
+        {label:'σ',data:hh.map(r=>r.s),borderColor:teal,backgroundColor:teal,tension:.3,yAxisID:'y1'},
+        {label:'K',data:hh.map(r=>r.k),borderColor:muted,backgroundColor:muted,borderDash:[4,3],tension:.3,yAxisID:'y1'}
+      ]},
+      options:{responsive:true,interaction:{mode:'index',intersect:false},
+        plugins:{legend:{labels:{color:muted,font:{size:11},boxWidth:12}}},
+        scales:{
+          x:{ticks:{color:muted,font:{size:10}},grid:{color:line}},
+          y:{position:'left',ticks:{color:amber,font:{size:10}},grid:{color:line},title:{display:true,text:'命中率%',color:amber,font:{size:10}}},
+          y1:{position:'right',ticks:{color:teal,font:{size:10}},grid:{display:false},title:{display:true,text:'σ / K',color:teal,font:{size:10}}}
+        }}
+    });
+  }
 }
 async function collectSamples(days,prog){
   const season=+etToday().slice(0,4);
