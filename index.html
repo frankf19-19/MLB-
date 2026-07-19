@@ -355,7 +355,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.0</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.1</footer>
 </div>
 
 <script>
@@ -1620,7 +1620,13 @@ tb.innerHTML='<span style="font-family:var(--cond);letter-spacing:.1em;font-size
 tb.querySelectorAll('.theme-b').forEach(b=>b.addEventListener('click',()=>applyTheme(b.dataset.t)));
 applyTheme(fxTheme);
 
-dp.addEventListener('change',loadDay);
+const dp=$('datePick');
+dp.value=etToday();
+$('loadBtn').addEventListener('click',()=>loadDay());
+$('prevBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,-1);loadDay();});
+$('nextBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,1);loadDay();});
+$('todayBtn').addEventListener('click',()=>{dp.value=etToday();loadDay();});
+dp.addEventListener('change',()=>loadDay());
 loadDay().then(()=>autoCalibrate());
 </script>
 </body>
