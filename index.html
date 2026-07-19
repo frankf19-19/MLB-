@@ -13,6 +13,7 @@
   :root{
     --field:#0c1a2b; --panel:#14283d; --panel-2:#1a3149;
     --line:rgba(226,236,232,.14); --chalk:#eef4f1; --muted:#8299ac;
+    --wash:rgba(255,255,255,.07); --wash2:rgba(255,255,255,.13); --ink2:#d6e0da; --btn-ink:#0c1a2b;
     --amber:#ffc247; --teal:#4ecac1; --hit:#46c46a; --miss:#ef5f5f; --grow:#7ec96f;
     --mono:'IBM Plex Mono',ui-monospace,monospace;
     --cond:'Barlow Condensed',sans-serif; --body:'Noto Sans TC',sans-serif;
@@ -43,13 +44,13 @@
 
   .datebar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;margin-bottom:14px}
   .nav{font-family:var(--mono);font-weight:600;font-size:18px;color:var(--chalk);
-    background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:9px;
+    background:var(--wash);border:1px solid var(--line);border-radius:9px;
     width:40px;height:40px;cursor:pointer;transition:background .12s}
-  .nav:hover{background:rgba(255,255,255,.13)}
+  .nav:hover{background:var(--wash2)}
   input[type=date]{
     font-family:var(--mono);font-weight:600;font-size:16px;color:var(--chalk);
-    background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:9px;
-    padding:8px 12px;color-scheme:dark;cursor:pointer}
+    background:var(--wash);border:1px solid var(--line);border-radius:9px;
+    padding:8px 12px;cursor:pointer}
   .today-btn{font-family:var(--cond);font-weight:600;letter-spacing:.06em;font-size:14px;
     color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px;
     padding:7px 14px;cursor:pointer}
@@ -57,7 +58,7 @@
   .btn{
     margin-left:auto;
     font-family:var(--cond);font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    font-size:16px;color:var(--field);background:var(--amber);border:none;border-radius:999px;
+    font-size:16px;color:var(--btn-ink);background:var(--amber);border:none;border-radius:999px;
     padding:11px 22px;cursor:pointer;display:inline-flex;align-items:center;gap:9px;
     box-shadow:0 4px 18px rgba(255,194,71,.28);transition:transform .12s,box-shadow .12s}
   .btn:hover{transform:translateY(-1px)} .btn:disabled{opacity:.6;cursor:default;box-shadow:none}
@@ -68,7 +69,7 @@
   .searchbar{display:flex;gap:8px;position:relative;margin-bottom:14px}
   .searchbar input[type=text]{
     flex:1;font-family:var(--body);font-size:15px;color:var(--chalk);
-    background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:999px;
+    background:var(--wash);border:1px solid var(--line);border-radius:999px;
     padding:10px 18px;outline:none}
   .searchbar input[type=text]::placeholder{color:var(--muted)}
   .searchbar input[type=text]:focus{border-color:var(--teal)}
@@ -101,7 +102,7 @@
 
   /* 頭條 */
   .headline{border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;
-    background:var(--panel);padding:12px 16px;margin-bottom:8px;font-size:14.5px;color:#dde7e1}
+    background:var(--panel);padding:12px 16px;margin-bottom:8px;font-size:14.5px;color:var(--ink2)}
   .headline .hk{font-family:var(--cond);font-weight:700;letter-spacing:.1em;font-size:12px;
     text-transform:uppercase;color:var(--amber);margin-right:8px}
   .headline.major{border-left-color:var(--miss);background:linear-gradient(90deg,rgba(239,95,95,.07),var(--panel))}
@@ -111,7 +112,7 @@
   section.collapsed .caret{transform:rotate(-90deg)}
   section.collapsed > :not(.sec-head){display:none}
   .analysis{border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;
-    background:var(--panel);padding:clamp(14px,4vw,20px);white-space:pre-wrap;color:#dde7e1;font-size:15px;line-height:1.75}
+    background:var(--panel);padding:clamp(14px,4vw,20px);white-space:pre-wrap;color:var(--ink2);font-size:15px;line-height:1.75}
 
   .game{border:1px solid var(--line);border-radius:10px;background:var(--panel);
     padding:14px clamp(14px,3vw,18px);margin-bottom:12px}
@@ -156,12 +157,12 @@
   .meta{color:var(--muted);font-size:12.5px;font-family:var(--mono);margin-top:2px}
   .scorepred b{color:var(--teal);font-family:var(--mono)}
   .prob{margin-top:12px}
-  .prob-bar{height:8px;border-radius:5px;overflow:hidden;background:rgba(255,255,255,.08);display:flex}
+  .prob-bar{height:8px;border-radius:5px;overflow:hidden;background:var(--wash);display:flex}
   .prob-bar .away{background:var(--teal);opacity:.55} .prob-bar .home{background:var(--teal)}
   .prob-lbl{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:6px}
   .prob-lbl b{color:var(--chalk);font-weight:600} .pick{color:var(--amber)}
   .why,.review{border-top:1px dashed var(--line);margin-top:12px;padding-top:10px;
-    font-size:13.5px;color:#c8d5cf;line-height:1.65}
+    font-size:13.5px;color:var(--ink2);line-height:1.65}
   .why .k,.review .k{font-family:var(--cond);font-weight:700;letter-spacing:.1em;
     text-transform:uppercase;font-size:12px;margin-right:8px}
   .why .k{color:var(--teal)}
@@ -194,7 +195,7 @@
   .chip.n{background:rgba(130,153,172,.1);color:var(--muted);border:1px solid var(--line)}
   .pitchbar{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:13px}
   .pitchbar .pt{min-width:110px;white-space:nowrap}
-  .pitchbar .bar{flex:1;height:9px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+  .pitchbar .bar{flex:1;height:9px;border-radius:5px;background:var(--wash);overflow:hidden}
   .pitchbar .bar i{display:block;height:100%;background:var(--teal);border-radius:5px}
   .pitchbar .pv{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:120px;text-align:right}
   .p-sw .sk{color:var(--teal);font-weight:700;margin-right:6px}
@@ -226,7 +227,7 @@
   .pn-strike{background:rgba(239,95,95,.16);color:var(--miss);border:1px solid rgba(239,95,95,.45)}
   .pn-inplay{background:rgba(255,194,71,.16);color:var(--amber);border:1px solid rgba(255,194,71,.45)}
   .pitch-item .spd{font-family:var(--mono);color:var(--muted);margin-left:auto}
-  .play-item{border-left:3px solid var(--line);padding:6px 12px;margin-bottom:8px;font-size:13.5px;color:#c8d5cf}
+  .play-item{border-left:3px solid var(--line);padding:6px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink2)}
   .play-item .pi-inn{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
   .play-item.scoring{border-left-color:var(--amber)}
 
@@ -249,7 +250,7 @@
   table.stat th:first-child,table.stat td:first-child{text-align:left}
   table.stat th:nth-child(2),table.stat td:nth-child(2){text-align:left}
   table.stat td{font-family:var(--mono);text-align:right;padding:7px 12px;
-    border-bottom:1px solid rgba(226,236,232,.06);white-space:nowrap;color:#d5e0da}
+    border-bottom:1px solid rgba(226,236,232,.06);white-space:nowrap;color:var(--ink2)}
   table.stat tr.career td{color:var(--amber);font-weight:600;border-top:1px solid var(--line)}
   .player .pnm{cursor:pointer;border-bottom:1px dashed transparent}
   .player .pnm:hover{color:var(--teal);border-bottom-color:var(--teal)}
@@ -262,7 +263,7 @@
   .wrap{position:relative;z-index:1}
   header,.game,.player,.analysis,.headline,.pd-head,.bio .b,.table-wrap,.zone-box,.pitch-item,.gd-score,.sr-item{transition:background 1s ease,border-color 1s ease}
   #themeBar{display:flex;align-items:center;gap:7px;margin-top:12px;position:relative;flex-wrap:wrap}
-  .theme-b{font-size:16px;line-height:1;background:rgba(255,255,255,.06);border:1px solid var(--line);
+  .theme-b{font-size:16px;line-height:1;background:var(--wash);border:1px solid var(--line);
     border-radius:999px;width:34px;height:34px;cursor:pointer;transition:transform .12s,border-color .12s}
   .theme-b:hover{transform:translateY(-1px)}
   .theme-b.on{border-color:var(--amber);box-shadow:0 0 10px rgba(255,194,71,.3)}
@@ -311,7 +312,7 @@
       <div class="analysis" style="border-left-color:var(--teal)">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
           回測範圍:
-          <select id="calibDays" style="font-family:var(--mono);background:rgba(255,255,255,.07);color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:6px 10px">
+          <select id="calibDays" style="font-family:var(--mono);background:var(--wash);color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:6px 10px">
             <option value="7">近 7 天</option>
             <option value="14" selected>近 14 天</option>
             <option value="30">近 30 天</option>
@@ -373,7 +374,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.7</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.0</footer>
 </div>
 
 <script>
@@ -405,7 +406,7 @@ async function fetchStandingsAsOf(date){
   return m;
 }
 async function fetchGames(date){
-  const d=await jget(`${API}/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team,linescore`);
+  const d=await jget(`${API}/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team,linescore,scoringplays`);
   const out=[];
   (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(g=>{
     const h=g.teams.home,a=g.teams.away,ls=g.linescore||{};
@@ -419,7 +420,9 @@ async function fetchGames(date){
       rhe:{aR:ls.teams?.away?.runs,aH:ls.teams?.away?.hits,aE:ls.teams?.away?.errors,
            hR:ls.teams?.home?.runs,hH:ls.teams?.home?.hits,hE:ls.teams?.home?.errors},
       on1:!!ls.offense?.first,on2:!!ls.offense?.second,on3:!!ls.offense?.third,
-      batter:ls.offense?.batter,pitcher:ls.defense?.pitcher});
+      batter:ls.offense?.batter,pitcher:ls.defense?.pitcher,
+      scoring:(g.scoringPlays||[]).map(sp=>({inn:sp.about?.inning,half:sp.about?.halfInning,
+        desc:sp.result?.description})).filter(x=>x.desc)});
   }));
   return out;
 }
@@ -629,8 +632,30 @@ function review(g,p){
 /* ---------- 首頁渲染 ---------- */
 let curGames=[],curPreds=[];
 function teamLink(id,name){return `<span class="nm" data-team="${id}">${esc(name)}</span>`;}
+/* 即時戰況:依比分/局數/出局換算當下勝率 */
+function liveWinProb(diff,curInn,isTop,outs,m0){
+  const outsDone=Math.max(0,(curInn-1)*6+(isTop?0:3)+(outs||0));
+  const f=Math.max(0.02,1-outsDone/54);
+  const expFinal=diff+(m0||0)*f;
+  const s=RUN_SIGMA*Math.sqrt(f);
+  return {p:Math.max(.02,Math.min(.98,normCdf(expFinal/s))),f};
+}
+function liveAnalysis(g,p){
+  if(g.status!=='Live'||!g.curInn||g.rhe?.hR==null)return null;
+  const d=(g.rhe.hR||0)-(g.rhe.aR||0);
+  const {p:lp,f}=liveWinProb(d,g.curInn,g.isTop,g.outs,p.raw_margin);
+  const preHome=p.home_prob??.5;
+  const lead=d===0?'雙方平手':`${d>0?g.home:g.away} 領先 ${Math.abs(d)} 分`;
+  let t=`${g.curInn}局${g.isTop?'上':'下'}、${g.outs??0} 出局,${lead}。即時勝率:主隊 ${(lp*100).toFixed(0)}%(賽前 ${(preHome*100).toFixed(0)}%)。`;
+  const preFavHome=preHome>=.5;
+  if((lp>=.5)!==preFavHome&&Math.abs(lp-.5)>=.1)t+=`戰局翻轉中——賽前看好的一方目前居於下風。`;
+  if(g.curInn>=7&&Math.abs(d)<=1)t+=`進入後段一分差攻防,牛棚與代打調度將決定勝負。`;
+  else if(Math.abs(d)>=5&&g.curInn>=6)t+=`比分拉開,大勢漸定。`;
+  if((g.on2||g.on3)&&Math.abs(d)<=3)t+=`壘上有得分威脅,關鍵打席。`;
+  return {lp,text:t};
+}
 function diamondSvg(on1,on2,on3){
-  const c=(b)=>b?'var(--teal)':'rgba(255,255,255,.14)';
+  const c=(b)=>b?'var(--teal)':'var(--wash2)';
   return `<svg viewBox="0 0 44 34" width="40" height="31" aria-hidden="true">
     <rect x="17" y="2" width="10" height="10" transform="rotate(45 22 7)" fill="${c(on2)}"/>
     <rect x="4" y="15" width="10" height="10" transform="rotate(45 9 20)" fill="${c(on3)}"/>
@@ -678,6 +703,7 @@ function gameCard(g,p,rv){
       <div class="team">${teamLink(g.homeId,g.home)}${recH}${sc[1]}</div>
     </div>`;
   }
+  const la=isLive?liveAnalysis(g,p):null;
   const liveRow=isLive?`<div class="live-row">
       ${g.pitcher?`<div class="duel">${avatarImg(g.pitcher.id,g.pitcher.fullName,'sr-ava')}<div><div class="role">投球</div><div class="dnm" data-pid="${g.pitcher.id}">${esc(g.pitcher.fullName)}</div></div></div>`:''}
       ${g.batter?`<div class="duel">${avatarImg(g.batter.id,g.batter.fullName,'sr-ava')}<div><div class="role">打擊</div><div class="dnm" data-pid="${g.batter.id}">${esc(g.batter.fullName)}</div></div></div>`:''}
@@ -693,8 +719,10 @@ function gameCard(g,p,rv){
     <div class="meta" id="h2h-${g.id}"></div>
     ${liveRow}
     ${predLine}
-    <div class="prob"><div class="prob-bar"><div class="away" style="width:${ap}%"></div><div class="home" style="width:${hp}%"></div></div>
-      <div class="prob-lbl"><span>客 <b>${ap}%</b></span><span><b>${hp}%</b> 主</span></div></div>
+    <div class="prob"><div class="prob-bar"><div class="away" style="width:${la?100-Math.round(la.lp*100):ap}%"></div><div class="home" style="width:${la?Math.round(la.lp*100):hp}%"></div></div>
+      <div class="prob-lbl"><span>${la?'即時 ':''}客 <b>${la?100-Math.round(la.lp*100):ap}%</b></span><span><b>${la?Math.round(la.lp*100):hp}%</b> 主${la?' 即時':''}</span></div></div>
+    ${la?`<div class="why" style="border-top:none;margin-top:8px;padding-top:0"><span class="k" style="color:var(--amber)">即時戰況</span>${esc(la.text)}</div>`:''}
+    ${((isLive||isFinal)&&g.scoring&&g.scoring.length)?`<div class="why"${la?' style="border-top:none;margin-top:6px;padding-top:0"':''}><span class="k" style="color:var(--teal)">${isLive?'即時重點':'比賽重點'}</span>${g.scoring.slice(-2).map(s=>`<span class="pstat">[${s.inn}局${s.half==='top'?'上':'下'}]</span> ${esc(s.desc)}`).join('<br>')}</div>`:''}
     <div class="why"><span class="k">預測理由</span>${esc(p.why)}</div>
     ${rv?`<div class="review ${rv.hit?'good':'bad'}"><span class="k">${rv.hit?'賽後檢討 ✓':'賽後檢討 ✗'}</span>${esc(rv.text)}</div>`:''}
   </div>`;
@@ -1081,8 +1109,8 @@ function zoneSvg(events){
   const zx=X(-0.7083),zw=X(0.7083)-X(-0.7083),zy=Y(szT),zh=Y(szB)-Y(szT);
   const cells=[];
   for(let i=1;i<3;i++){
-    cells.push(`<line x1="${zx+zw*i/3}" y1="${zy}" x2="${zx+zw*i/3}" y2="${zy+zh}" stroke="rgba(255,255,255,.15)"/>`);
-    cells.push(`<line x1="${zx}" y1="${zy+zh*i/3}" x2="${zx+zw}" y2="${zy+zh*i/3}" stroke="rgba(255,255,255,.15)"/>`);
+    cells.push(`<line x1="${zx+zw*i/3}" y1="${zy}" x2="${zx+zw*i/3}" y2="${zy+zh}" stroke="var(--line)"/>`);
+    cells.push(`<line x1="${zx}" y1="${zy+zh*i/3}" x2="${zx+zw}" y2="${zy+zh*i/3}" stroke="var(--line)"/>`);
   }
   const dots=ps.map((e,i)=>{
     const c=e.details?.isInPlay?'var(--amber)':e.details?.isBall?'var(--teal)':'var(--miss)';
@@ -1091,7 +1119,7 @@ function zoneSvg(events){
       <text x="${x}" y="${y+4}" text-anchor="middle" font-size="11" font-weight="700" fill="#0c1a2b">${i+1}</text>`;
   }).join('');
   return `<svg viewBox="0 0 180 240" width="180" height="240">
-    <rect x="${zx}" y="${zy}" width="${zw}" height="${zh}" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.4)"/>
+    <rect x="${zx}" y="${zy}" width="${zw}" height="${zh}" fill="rgba(255,255,255,.04)" stroke="var(--muted)"/>
     ${cells.join('')}${dots}
     <path d="M ${X(-0.7083)} 228 L ${X(0.7083)} 228 L ${X(0.55)} 234 L ${X(0)} 238 L ${X(-0.55)} 234 Z" fill="rgba(255,255,255,.25)"/>
   </svg>`;
@@ -1192,7 +1220,14 @@ async function loadGame(gid){
         <div class="gd-team"><div class="gnm" data-team="${home.id}">${esc(home.teamName||home.name||'主')}</div>
           <div class="grec">${esc(home.record?`${home.record.wins}-${home.record.losses}`:'')}</div></div>
       </div>
-      ${lineTable}${duel}${zone}${playsHtml}${boxes}`;
+      ${lineTable}
+      ${st==='Live'&&ls.currentInning?(()=>{
+        const d2=(hR||0)-(aR||0);
+        const lw=liveWinProb(d2,ls.currentInning,ls.isTopInning,ls.outs,0);
+        const lead2=d2===0?'雙方平手':`${d2>0?(home.teamName||'主隊'):(away.teamName||'客隊')} 領先 ${Math.abs(d2)} 分`;
+        return `<div class="why" style="margin-top:14px"><span class="k" style="color:var(--amber)">即時戰況</span>${esc(lead2)},依比分與剩餘局數估算主隊勝率約 ${(lw.p*100).toFixed(0)}%。</div>`;
+      })():''}
+      ${duel}${zone}${playsHtml}${boxes}`;
     bindPlayerClicks($('gameDetail'));
     $('gameDetail').querySelectorAll('.gnm[data-team]').forEach(el=>{
       el.addEventListener('click',()=>showTeam(+el.dataset.team,el.textContent));});
@@ -1612,11 +1647,14 @@ $('stBackBtn').addEventListener('click',()=>history.back());
 
 /* ---------- 背景主題(動畫粒子) ---------- */
 const THEMES=[
-  {id:'night',emoji:'🌙',name:'夜場經典',pal:{field:'#0c1a2b',panel:'#14283d',panel2:'#1a3149',glow:'#163150',amber:'#ffc247',teal:'#4ecac1'}},
-  {id:'fireworks',emoji:'🎆',name:'滿貫煙火',pal:{field:'#0a1020',panel:'#131c33',panel2:'#182342',glow:'#1a2a55',amber:'#ffcf5c',teal:'#7ab8ff'}},
-  {id:'dusk',emoji:'🌇',name:'黃昏開球',pal:{field:'#1d1226',panel:'#2b1b33',panel2:'#35213d',glow:'#5a2b3f',amber:'#ffd27d',teal:'#ffab76'}},
-  {id:'storm',emoji:'⛈️',name:'雷雨延賽',pal:{field:'#0b1119',panel:'#141d29',panel2:'#1a2533',glow:'#22303f',amber:'#ffe08a',teal:'#7fd4e8'}},
-  {id:'neon',emoji:'🌆',name:'霓虹球場',pal:{field:'#0d0a1a',panel:'#171130',panel2:'#1e1740',glow:'#2a1458',amber:'#ff6ec7',teal:'#00e5ff'}}];
+  {id:'night',emoji:'🌙',name:'夜場經典',pal:{field:'#0c1a2b',panel:'#14283d',panel2:'#1a3149',glow:'#163150',amber:'#ffc247',teal:'#4ecac1',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
+  {id:'fireworks',emoji:'🎆',name:'滿貫煙火',pal:{field:'#0a1020',panel:'#131c33',panel2:'#182342',glow:'#1a2a55',amber:'#ffcf5c',teal:'#7ab8ff',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
+  {id:'dusk',emoji:'🌇',name:'黃昏開球',pal:{field:'#1d1226',panel:'#2b1b33',panel2:'#35213d',glow:'#5a2b3f',amber:'#ffd27d',teal:'#ffab76',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
+  {id:'storm',emoji:'⛈️',name:'雷雨延賽',pal:{field:'#0b1119',panel:'#141d29',panel2:'#1a2533',glow:'#22303f',amber:'#ffe08a',teal:'#7fd4e8',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
+  {id:'neon',emoji:'🌆',name:'霓虹球場',pal:{field:'#0d0a1a',panel:'#171130',panel2:'#1e1740',glow:'#2a1458',amber:'#ff6ec7',teal:'#00e5ff',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
+  {id:'daysky',emoji:'☀️',name:'日場藍天',light:true,pal:{field:'#d8e9f7',panel:'#ffffff',panel2:'#edf5fc',glow:'#b7d8f2',amber:'#d97706',teal:'#0f766e',chalk:'#12283a',muted:'#5b7286',line:'rgba(18,40,58,.16)',wash:'rgba(18,40,58,.06)',wash2:'rgba(18,40,58,.13)',ink2:'#2c3e4a',btnInk:'#ffffff'}},
+  {id:'grass',emoji:'🌿',name:'綠茵日場',light:true,pal:{field:'#e7efdb',panel:'#ffffff',panel2:'#f2f7e9',glow:'#cbe2b4',amber:'#b45309',teal:'#15803d',chalk:'#1e2c1a',muted:'#5c6f56',line:'rgba(30,44,26,.16)',wash:'rgba(30,44,26,.06)',wash2:'rgba(30,44,26,.13)',ink2:'#33422e',btnInk:'#ffffff'}},
+  {id:'cream',emoji:'🧢',name:'復古奶油',light:true,pal:{field:'#f4ecdd',panel:'#fffdf6',panel2:'#f6f0e2',glow:'#e9d5b0',amber:'#c2410c',teal:'#0e7490',chalk:'#33261a',muted:'#77664f',line:'rgba(51,38,26,.16)',wash:'rgba(51,38,26,.06)',wash2:'rgba(51,38,26,.13)',ink2:'#4a3a29',btnInk:'#ffffff'}}];
 let fxTheme=localStorage.getItem('mlb_theme')||'night';
 if(!THEMES.some(t=>t.id===fxTheme))fxTheme='night';
 const fxCanvas=document.getElementById('fx');
@@ -1642,6 +1680,15 @@ function fxInit(){
     for(let i=0;i<n*.8;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
       r:rnd(1.5,4),vx:rnd(-10,10),vy:rnd(-6,6),o:rnd(.12,.4),
       c:Math.random()<.5?'255,110,199':'0,229,255',tw:rnd(0,6.28)});
+  }else if(fxTheme==='daysky'){
+    for(let i=0;i<Math.max(5,n*0.16);i++)fxParts.push({x:rnd(-80,innerWidth),y:rnd(20,innerHeight*.55),
+      s:rnd(.6,1.7),v:rnd(7,18),o:rnd(.3,.5)});
+  }else if(fxTheme==='grass'){
+    for(let i=0;i<n*0.8;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
+      r:rnd(1.2,2.6),vx:rnd(-6,6),vy:-rnd(6,16),o:rnd(.18,.45),tw:rnd(0,6.28)});
+  }else if(fxTheme==='cream'){
+    for(let i=0;i<n*0.7;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
+      r:rnd(1,3),vx:rnd(4,12),vy:-rnd(2,7),o:rnd(.12,.35),tw:rnd(0,6.28)});
   }
 }
 function fxTick(t){
@@ -1723,6 +1770,31 @@ function fxTick(t){
       fxCtx.beginPath();fxCtx.moveTo(streak.x-W*.18,streak.y);fxCtx.lineTo(streak.x,streak.y);fxCtx.stroke();
       if(streak.x-W*.18>W)streak=null;
     }
+  }else if(fxTheme==='daysky'){
+    fxParts.forEach(p=>{
+      p.x+=p.v*dt;
+      if(p.x-90*p.s>W){p.x=-90*p.s;p.y=rnd(20,H*.55);}
+      fxCtx.fillStyle=`rgba(255,255,255,${p.o})`;
+      const e=(cx,cy,rx,ry)=>{fxCtx.beginPath();fxCtx.ellipse(cx,cy,rx,ry,0,0,6.28);fxCtx.fill();};
+      e(p.x,p.y,44*p.s,15*p.s);e(p.x-27*p.s,p.y+7*p.s,27*p.s,11*p.s);e(p.x+28*p.s,p.y+7*p.s,30*p.s,12*p.s);
+    });
+  }else if(fxTheme==='grass'){
+    fxParts.forEach(p=>{
+      p.tw+=dt*1.8;p.x+=(p.vx+Math.sin(p.tw)*6)*dt;p.y+=p.vy*dt;
+      if(p.y<-8){p.y=H+8;p.x=rnd(0,W);}
+      const o=p.o*(0.6+0.4*Math.sin(p.tw));
+      fxCtx.fillStyle=`rgba(120,160,60,${o})`;
+      fxCtx.beginPath();fxCtx.arc(p.x,p.y,p.r,0,6.28);fxCtx.fill();
+    });
+  }else if(fxTheme==='cream'){
+    fxParts.forEach(p=>{
+      p.tw+=dt*1.4;p.x+=p.vx*dt;p.y+=p.vy*dt;
+      if(p.x>W+8)p.x=-8;if(p.y<-8){p.y=H+8;p.x=rnd(0,W);}
+      const o=p.o*(0.65+0.35*Math.sin(p.tw));
+      const g=fxCtx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3);
+      g.addColorStop(0,`rgba(190,140,80,${o})`);g.addColorStop(1,'rgba(190,140,80,0)');
+      fxCtx.fillStyle=g;fxCtx.beginPath();fxCtx.arc(p.x,p.y,p.r*3,0,6.28);fxCtx.fill();
+    });
   }
   fxRAF=requestAnimationFrame(fxTick);
 }
@@ -1736,6 +1808,14 @@ function applyTheme(id){
   r.setProperty('--glow-top',th.pal.glow);
   r.setProperty('--amber',th.pal.amber);
   r.setProperty('--teal',th.pal.teal);
+  r.setProperty('--chalk',th.pal.chalk);
+  r.setProperty('--muted',th.pal.muted);
+  r.setProperty('--line',th.pal.line);
+  r.setProperty('--wash',th.pal.wash);
+  r.setProperty('--wash2',th.pal.wash2);
+  r.setProperty('--ink2',th.pal.ink2);
+  r.setProperty('--btn-ink',th.pal.btnInk);
+  document.documentElement.style.colorScheme=th.light?'light':'dark';
   document.querySelectorAll('.theme-b').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
   cancelAnimationFrame(fxRAF);fxRAF=null;
   fxCtx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
