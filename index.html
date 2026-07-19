@@ -377,7 +377,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.2</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.3</footer>
 </div>
 
 <script>
@@ -1343,6 +1343,32 @@ async function fetchArsenal(pid,season){
     return rows;
   }catch(e){return [];}
 }
+async function fetchZoneData(pid,season){
+  // 從投手本季比賽記錄抓進壘點(pX,pZ)。用 game logs 找最近幾場,再抓 playByPlay。
+  try{
+    const g=await jget(`${API}/people/${pid}/stats?stats=gameLog&group=pitching&season=${season}`);
+    const games=((g.stats||[])[0]?.splits||[]).filter(s=>s.game?.gamePk).slice(-6);
+    const pts=[];
+    for(const s of games){
+      try{
+        const pk=s.game.gamePk;
+        const pbp=await jget(`${API}/game/${pk}/playByPlay`);
+        (pbp.allPlays||[]).forEach(pl=>{
+          if(pl.matchup?.pitcher?.id!==pid)return;
+          (pl.playEvents||[]).forEach(e=>{
+            if(!e.isPitch||!e.pitchData?.coordinates)return;
+            const px=e.pitchData.coordinates.pX,pz=e.pitchData.coordinates.pZ;
+            if(!isFinite(px)||!isFinite(pz))return;
+            const cls=e.details?.isInPlay?'inplay':e.details?.isBall?'ball':'strike';
+            pts.push({x:px,y:pz,cls});
+          });
+        });
+      }catch(e){}
+      if(pts.length>=250)break;
+    }
+    return pts;
+  }catch(e){return [];}
+}
 function arsenalHtml(rows){
   if(!rows.length)return '';
   return `<div class="pos-group" style="margin-top:14px">球種配置(本季使用率與均速)</div>
@@ -1359,9 +1385,11 @@ async function showPlayer(pid,fromPop){
   $('playerDetail').innerHTML='<div class="empty">載入球員生涯資料…</div>';
   try{
     const season=+etToday().slice(0,4);
-    const [d,arsenal]=await Promise.all([
+    const isPitcherPre=true; // 先抓,若非投手 fetchZoneData 會回空陣列
+    const [d,arsenal,zonePts]=await Promise.all([
       jget(`${API}/people?personIds=${pid}&hydrate=currentTeam,stats(group=[hitting,pitching],type=[yearByYear,career])`),
-      fetchArsenal(pid,season)]);
+      fetchArsenal(pid,season),
+      fetchZoneData(pid,season)]);
     const p=(d.people||[])[0]; if(!p)throw new Error('查無資料');
     const pos=p.primaryPosition?.abbreviation||'?';
     const cm=ftToCm(p.height), kg=p.weight?Math.round(p.weight*0.4536):null;
@@ -1385,6 +1413,7 @@ async function showPlayer(pid,fromPop){
     }
     const hitRows=collectRows(p,'hitting'), pitRows=collectRows(p,'pitching');
     // 投手優先顯示投球表;二刀流兩張都有
+    const zoneCanvas=isP?'<div class="pos-group" style="margin-top:14px">進壘點分布(近期)</div><div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;max-width:360px"><canvas id="zoneChart" height="300"></canvas><div class="meta" style="margin-top:6px">🔴 好球/揮空 · 🔵 壞球 · 🟡 被擊出 · 方框為好球帶</div></div>':'';
     const tables=isP?(pitTable(pitRows)+hitTable(hitRows)):(hitTable(hitRows)+pitTable(pitRows));
     $('playerDetail').innerHTML=`
       <div class="pd-head">
@@ -1409,9 +1438,37 @@ async function showPlayer(pid,fromPop){
       ${sw}
       ${seasonEval&&!isP?'<div class="pos-group" style="margin-top:14px">能力雷達</div><div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;max-width:420px"><canvas id="radarChart" height="240"></canvas></div>':''}
       ${arsenalHtml(arsenal)}
+      ${zoneCanvas}
       ${tables||'<div class="empty" style="margin-top:12px">查無生涯數據。</div>'}`;
     const tl=$('pdTeam');
     if(tl&&p.currentTeam?.id)tl.addEventListener('click',()=>showTeam(p.currentTeam.id,tn));
+    // 投手進壘點熱區
+    if(isP&&window.Chart&&document.getElementById('zoneChart')&&zonePts.length){
+      const css=getComputedStyle(document.documentElement);
+      const line=css.getPropertyValue('--line').trim(),muted=css.getPropertyValue('--muted').trim();
+      const col={strike:'rgba(239,95,95,.55)',ball:'rgba(78,202,193,.5)',inplay:'rgba(255,194,71,.7)'};
+      const mk=cls=>zonePts.filter(p=>p.cls===cls).map(p=>({x:p.x,y:p.y}));
+      const zonePlugin={id:'zbox',afterDraw(c){const{ctx,scales:{x,y}}=c;ctx.save();
+        ctx.strokeStyle=muted;ctx.lineWidth=1.5;
+        const x0=x.getPixelForValue(-0.83),x1=x.getPixelForValue(0.83),y0=y.getPixelForValue(3.5),y1=y.getPixelForValue(1.5);
+        ctx.strokeRect(x0,y0,x1-x0,y1-y0);
+        ctx.strokeStyle=line;ctx.lineWidth=.5;
+        for(let i=1;i<3;i++){const xx=x0+(x1-x0)*i/3;ctx.beginPath();ctx.moveTo(xx,y0);ctx.lineTo(xx,y1);ctx.stroke();
+          const yy=y0+(y1-y0)*i/3;ctx.beginPath();ctx.moveTo(x0,yy);ctx.lineTo(x1,yy);ctx.stroke();}
+        ctx.restore();}};
+      if(window._zoneCh)window._zoneCh.destroy();
+      window._zoneCh=new Chart(document.getElementById('zoneChart'),{
+        type:'scatter',
+        data:{datasets:[
+          {label:'好球/揮空',data:mk('strike'),backgroundColor:col.strike,pointRadius:4},
+          {label:'壞球',data:mk('ball'),backgroundColor:col.ball,pointRadius:4},
+          {label:'被擊出',data:mk('inplay'),backgroundColor:col.inplay,pointRadius:5}
+        ]},
+        options:{responsive:true,aspectRatio:0.85,plugins:{legend:{display:false}},
+          scales:{x:{min:-2,max:2,display:false},y:{min:0,max:5,display:false}}},
+        plugins:[zonePlugin]
+      });
+    }
     // 打者能力雷達(對比聯盟基準)
     if(!isP&&window.Chart&&document.getElementById('radarChart')){
       const yr=''+(+etToday().slice(0,4));
