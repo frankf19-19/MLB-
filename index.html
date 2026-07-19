@@ -104,6 +104,12 @@
     background:var(--panel);padding:12px 16px;margin-bottom:8px;font-size:14.5px;color:#dde7e1}
   .headline .hk{font-family:var(--cond);font-weight:700;letter-spacing:.1em;font-size:12px;
     text-transform:uppercase;color:var(--amber);margin-right:8px}
+  .headline.major{border-left-color:var(--miss);background:linear-gradient(90deg,rgba(239,95,95,.07),var(--panel))}
+  .headline.major .hk{color:var(--miss)}
+  .sec-head.click{cursor:pointer;user-select:none}
+  .sec-head .caret{font-size:13px;color:var(--muted);transition:transform .2s;display:inline-block;margin-left:6px}
+  section.collapsed .caret{transform:rotate(-90deg)}
+  section.collapsed > :not(.sec-head){display:none}
   .analysis{border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;
     background:var(--panel);padding:clamp(14px,4vw,20px);white-space:pre-wrap;color:#dde7e1;font-size:15px;line-height:1.75}
 
@@ -364,7 +370,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.2</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v4.4</footer>
 </div>
 
 <script>
@@ -892,7 +898,8 @@ function playerCard(entry){
 }
 
 /* ---------- 球隊名單頁 ---------- */
-async function showTeam(teamId,teamName){
+async function showTeam(teamId,teamName,fromPop){
+  if(!fromPop)history.pushState({v:'team',id:teamId,name:teamName},'');
   showView('team');
   $('teamTitle').textContent=teamName||'球隊名單';
   $('teamTag').textContent='現役名單(即時)';
@@ -987,7 +994,7 @@ async function loadH2H(games,season){
   await Promise.allSettled(jobs);
 }
 
-/* ---------- 聯盟動態(官方異動 = 真實新聞) ---------- */
+/* ---------- 聯盟動態(官方異動 = 真實新聞,僅 MLB) ---------- */
 const TX_ZH=[
   [/trade/i,'交易'],[/signed as free agent|signed/i,'簽約'],
   [/recalled/i,'升上大聯盟'],[/optioned/i,'下放小聯盟'],
@@ -996,22 +1003,34 @@ const TX_ZH=[
   [/released/i,'釋出'],[/selected/i,'契約選入'],[/purchased/i,'契約購入'],
   [/retired/i,'退休'],[/suspension|suspended/i,'禁賽']];
 function txZh(t){for(const[re,zh]of TX_ZH)if(re.test(t||''))return zh;return t||'異動';}
+let mlbIdSet=null;
+async function ensureMlbIds(){
+  if(mlbIdSet)return mlbIdSet;
+  const d=await jget(`${API}/teams?sportId=1&fields=teams,id`);
+  mlbIdSet=new Set((d.teams||[]).map(t=>t.id));
+  return mlbIdSet;
+}
 async function loadTransactions(date){
   try{
-    const d=await jget(`${API}/transactions?startDate=${shiftDate(date,-1)}&endDate=${date}`);
+    const [ids,d]=await Promise.all([ensureMlbIds(),
+      jget(`${API}/transactions?startDate=${shiftDate(date,-1)}&endDate=${date}`)]);
     let tx=(d.transactions||[]).filter(t=>t.description);
+    // 只留 MLB 30 隊相關的異動
+    tx=tx.filter(t=>ids.has(t.toTeam?.id)||ids.has(t.fromTeam?.id));
     tx.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.id||0)-(a.id||0));
-    // 優先顯示大事:交易/簽約/傷兵/釋出 排前面
-    const weight=t=>{const z=txZh(t.typeDesc);
-      return z==='交易'?0:z==='簽約'?1:z==='傷兵名單'?2:z==='釋出'?3:z==='DFA 指定讓渡'?4:5;};
+    // 重大 = MLB 隊之間的交易;其次依類型排序
+    const isMajor=t=>txZh(t.typeDesc)==='交易'&&ids.has(t.toTeam?.id)&&ids.has(t.fromTeam?.id);
+    const weight=t=>{if(isMajor(t))return 0;const z=txZh(t.typeDesc);
+      return z==='交易'?1:z==='簽約'?2:z==='傷兵名單'?3:z==='釋出'?4:z==='DFA 指定讓渡'?5:6;};
     tx.sort((a,b)=>weight(a)-weight(b));
-    tx=tx.slice(0,10);
+    tx=tx.slice(0,12);
     if(!tx.length){$('txSec').classList.add('hidden');return;}
     $('txList').innerHTML=tx.map(t=>{
-      const zh=txZh(t.typeDesc);
+      const major=isMajor(t);
+      const zh=major?'重大 · 交易':txZh(t.typeDesc);
       const who=t.person?`<span class="pnm" data-pid="${t.person.id}" style="cursor:pointer;color:var(--chalk);font-weight:600">${esc(t.person.fullName)}</span> · `:'';
       const team=t.toTeam?.name||t.fromTeam?.name||'';
-      return `<div class="headline"><span class="hk">${esc(zh)}</span>${who}${team?esc(team)+' — ':''}<span style="color:var(--muted)">${esc(t.description)}</span></div>`;
+      return `<div class="headline ${major?'major':''}"><span class="hk">${esc(zh)}</span>${who}${team?esc(team)+' — ':''}<span style="color:var(--muted)">${esc(t.description)}</span></div>`;
     }).join('');
     $('txSec').classList.remove('hidden');
     bindPlayerClicks($('txList'));
@@ -1021,8 +1040,9 @@ async function loadTransactions(date){
 /* ---------- Gameday(單場即時)---------- */
 let gameTimer=null,curGameId=null;
 function stopGameTimer(){clearTimeout(gameTimer);gameTimer=null;}
-async function showGame(gid){
-  curGameId=gid;lastView='home';showView('game');
+async function showGame(gid,fromPop){
+  if(!fromPop)history.pushState({v:'game',id:gid},'');
+  curGameId=gid;showView('game');
   $('gameDetail').innerHTML='<div class="empty">載入比賽即時資料…</div>';
   loadGame(gid);
 }
@@ -1153,7 +1173,6 @@ async function loadGame(gid){
 }
 
 /* ---------- 球員個人頁 ---------- */
-let lastView='home';
 const sideMap={Left:'左',Right:'右',Switch:'左右開弓'};
 function ftToCm(h){ // "6' 2\"" → 188
   const m=/(\d+)'\s*(\d+)/.exec(h||'');
@@ -1219,10 +1238,8 @@ function arsenalHtml(rows){
       <span class="pv">${(r.pct*100).toFixed(1)}%${r.spd?` · ${r.spd.toFixed(1)} mph`:''}</span>
     </div>`).join('')}</div>`;
 }
-async function showPlayer(pid){
-  const cur=!$('gameView').classList.contains('hidden')?'game'
-    :!$('teamView').classList.contains('hidden')?'team':'home';
-  lastView=cur;
+async function showPlayer(pid,fromPop){
+  if(!fromPop)history.pushState({v:'player',id:pid},'');
   showView('player');
   $('playerDetail').innerHTML='<div class="empty">載入球員生涯資料…</div>';
   try{
@@ -1297,13 +1314,12 @@ function showView(v){
   $('standView').classList.toggle('hidden',v!=='stand');
   if(v!=='game')stopGameTimer();
 }
-$('backBtn').addEventListener('click',()=>showView('home'));
-$('pdBackBtn').addEventListener('click',()=>{
-  showView(lastView);
-  if(lastView==='game'&&curGameId)loadGame(curGameId);
+$('backBtn').addEventListener('click',()=>history.back());
+$('pdBackBtn').addEventListener('click',()=>history.back());
+$('gdBackBtn').addEventListener('click',()=>history.back());
+$('homeLink').addEventListener('click',()=>{
+  if($('homeView').classList.contains('hidden')){history.pushState({v:'home'},'');showView('home');}
 });
-$('gdBackBtn').addEventListener('click',()=>showView('home'));
-$('homeLink').addEventListener('click',()=>showView('home'));
 
 /* ---------- 模型體檢:回測校準(每日自動 + 分差係數 + 預測紀錄簿) ---------- */
 $('calibBtn').addEventListener('click',()=>{
@@ -1514,8 +1530,9 @@ $('calibRun').addEventListener('click',async()=>{
 /* ---------- 戰績榜(即時) ---------- */
 const DIV_ORDER=[[201,'美聯東區'],[202,'美聯中區'],[200,'美聯西區'],
                  [204,'國聯東區'],[205,'國聯中區'],[203,'國聯西區']];
-async function showStandings(){
-  lastView='home';showView('stand');
+async function showStandings(fromPop){
+  if(!fromPop)history.pushState({v:'stand'},'');
+  showView('stand');
   $('standings').innerHTML='<div class="empty">載入最新戰績…</div>';
   try{
     const season=+etToday().slice(0,4);
@@ -1555,7 +1572,7 @@ async function showStandings(){
   }catch(e){$('standings').innerHTML=`<div class="empty">戰績載入失敗:${esc(e.message)}</div>`;}
 }
 $('standBtn').addEventListener('click',showStandings);
-$('stBackBtn').addEventListener('click',()=>showView('home'));
+$('stBackBtn').addEventListener('click',()=>history.back());
 
 /* ---------- 背景主題(動畫粒子) ---------- */
 const THEMES=[
@@ -1694,6 +1711,34 @@ tb.innerHTML='<span style="font-family:var(--cond);letter-spacing:.1em;font-size
   +THEMES.map(t=>`<button class="theme-b" data-t="${t.id}" title="${t.name}">${t.emoji}</button>`).join('');
 tb.querySelectorAll('.theme-b').forEach(b=>b.addEventListener('click',()=>applyTheme(b.dataset.t)));
 applyTheme(fxTheme);
+
+/* ---------- 區塊收合 ---------- */
+function initCollapsibles(ids){
+  ids.forEach(id=>{
+    const sec=document.getElementById(id);if(!sec)return;
+    const head=sec.querySelector('.sec-head');if(!head)return;
+    head.classList.add('click');
+    const h2=head.querySelector('h2');
+    if(h2&&!h2.querySelector('.caret'))h2.insertAdjacentHTML('beforeend','<span class="caret">▾</span>');
+    if(localStorage.getItem('mlb_col_'+id)==='1')sec.classList.add('collapsed');
+    head.addEventListener('click',()=>{
+      sec.classList.toggle('collapsed');
+      localStorage.setItem('mlb_col_'+id,sec.classList.contains('collapsed')?'1':'0');
+    });
+  });
+}
+initCollapsibles(['aiSec','headlineSec','txSec']);
+
+/* ---------- 瀏覽器上一頁/下一頁支援 ---------- */
+addEventListener('popstate',e=>{
+  const s=e.state||{v:'home'};
+  if(s.v==='team')showTeam(s.id,s.name,true);
+  else if(s.v==='player')showPlayer(s.id,true);
+  else if(s.v==='game')showGame(s.id,true);
+  else if(s.v==='stand')showStandings(true);
+  else showView('home');
+});
+history.replaceState({v:'home'},'');
 
 const dp=$('datePick');
 dp.value=etToday();
