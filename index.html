@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
@@ -122,6 +122,8 @@
   .teams{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 220px}
   .team{display:flex;align-items:center;gap:8px}
   .team .rec{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .team .crest,.nmwrap .crest{margin-right:7px}
+  .team,.team.rhe .nmwrap{align-items:center}
   .rhe-head{display:grid;grid-template-columns:1fr repeat(3,34px);gap:0 6px;
     font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:right;margin-bottom:2px}
   .team.rhe{display:grid;grid-template-columns:1fr repeat(3,34px);gap:0 6px;align-items:center}
@@ -279,6 +281,8 @@
   .duel .dnm{cursor:pointer}
   .duel .dnm:hover{color:var(--teal)}
   #fx{position:fixed;inset:0;z-index:0;pointer-events:none}
+  #teamBg{position:fixed;inset:0;z-index:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+  #teamBg img{width:66vmin;max-width:600px;opacity:.08;filter:saturate(1.15)}
   .wrap{position:relative;z-index:1}
   header,.game,.player,.analysis,.headline,.pd-head,.bio .b,.table-wrap,.zone-box,.pitch-item,.gd-score,.sr-item{transition:background 1s ease,border-color 1s ease}
   #themeBar{display:flex;align-items:center;gap:7px;margin-top:12px;position:relative;flex-wrap:wrap}
@@ -294,9 +298,148 @@
     @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   }
 </style>
+
+<style id="glass-v8">
+  /* ===== v8 玻璃質感 App 風 ===== */
+  *{-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--amber);color:#0e0d24}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--wash2);border-radius:6px}
+
+  body{background:
+    radial-gradient(1000px 520px at 85% -12%, color-mix(in srgb,var(--amber) 20%,transparent), transparent 60%),
+    radial-gradient(820px 560px at -12% 110%, color-mix(in srgb,var(--teal) 16%,transparent), transparent 60%),
+    linear-gradient(160deg, color-mix(in srgb,var(--field) 90%,#000), var(--field) 52%, color-mix(in srgb,var(--field) 82%,var(--amber)));
+    background-attachment:fixed}
+  .wrap{max-width:1060px;padding:26px 18px 60px}
+
+  /* 玻璃卡通用 */
+  header,.game,.datebar,.analysis,.headline,.player,.pd-head,.gd-score,.table-wrap,.feed,.zone-box,.empty{
+    background:color-mix(in srgb,var(--panel) 92%,transparent);
+    backdrop-filter:blur(16px) saturate(1.25);-webkit-backdrop-filter:blur(16px) saturate(1.25);
+    border:1px solid var(--line);
+    box-shadow:0 12px 36px rgba(6,8,24,.35), inset 0 1px 0 rgba(255,255,255,.08)}
+
+  header{border-radius:24px;padding:28px 30px}
+  header::before{display:none}
+  .eyebrow{color:var(--teal);font-weight:700}
+  h1{font-family:'Space Grotesk','Noto Sans TC',sans-serif;font-weight:700;letter-spacing:-.02em;
+    font-size:clamp(30px,5vw,44px);
+    background:linear-gradient(92deg,var(--chalk) 30%,var(--amber) 75%,var(--teal));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .score-row{gap:12px;margin-top:18px}
+  .stat{background:var(--wash);border:1px solid var(--line);border-radius:16px;padding:12px 18px;min-width:118px}
+  .stat .num{font-family:'Space Grotesk',var(--mono);letter-spacing:-.03em;text-shadow:0 0 22px color-mix(in srgb,var(--amber) 45%,transparent)}
+
+  .datebar{border-radius:16px;padding:12px;margin-top:16px}
+  .today-btn{border-radius:11px;background:var(--wash);border-color:var(--line);font-weight:600;color:var(--chalk)}
+  .today-btn:hover{background:var(--wash2);border-color:var(--teal)}
+  .btn{border-radius:13px;color:var(--btn-ink);
+    background:linear-gradient(92deg,var(--amber),var(--teal));
+    box-shadow:0 8px 26px color-mix(in srgb,var(--amber) 45%,transparent);font-weight:800;border:none}
+  input[type=date],.searchbar input[type=text],select{border-radius:11px;background:var(--wash)}
+
+  .sec-head{margin:30px 0 14px}
+  .sec-head h2{font-family:'Space Grotesk','Noto Sans TC',sans-serif;font-weight:700;font-size:24px;
+    padding-left:0;letter-spacing:-.01em;
+    background:linear-gradient(92deg,var(--chalk) 40%,var(--teal));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sec-head h2::before{display:none}
+  .sec-head h2::after{content:"";display:inline-block;width:26px;height:4px;border-radius:3px;
+    background:linear-gradient(90deg,var(--amber),var(--teal));margin-left:12px;vertical-align:middle}
+
+  .game{border-radius:20px;padding:18px 22px;transition:transform .18s,box-shadow .18s,border-color .18s}
+  .game:hover{transform:translateY(-3px);
+    box-shadow:0 18px 48px rgba(6,8,24,.45), 0 0 0 1px color-mix(in srgb,var(--teal) 40%,transparent), inset 0 1px 0 rgba(255,255,255,.1)}
+  .team .nm{font-weight:700;font-size:16px}
+  .tlogo{object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.4))}
+  .tlwrap{display:inline-flex;align-items:center;justify-content:center;margin-right:9px}
+  .pill{border-radius:9px;font-weight:800;border:none}
+  .pill.live{background:linear-gradient(92deg,#FF5C7A,#FF8A5C);color:#fff;
+    box-shadow:0 0 18px rgba(255,92,122,.5);animation:livegl 1.8s ease-in-out infinite}
+  @keyframes livegl{0%,100%{box-shadow:0 0 12px rgba(255,92,122,.4)}50%{box-shadow:0 0 26px rgba(255,92,122,.75)}}
+  .pill.hit{background:linear-gradient(92deg,var(--teal),color-mix(in srgb,var(--teal) 60%,#7CFFC4));color:#0e0d24}
+  .pill.miss{background:linear-gradient(92deg,#FF5C7A,#C0392B);color:#fff}
+  .pill.wait{background:var(--wash);color:var(--muted);border:1px solid var(--line)}
+  .prob-bar{height:10px;border-radius:6px;background:var(--wash);box-shadow:inset 0 1px 4px rgba(0,0,0,.35)}
+  .prob-bar .home{background:linear-gradient(90deg,color-mix(in srgb,var(--amber) 70%,#fff),var(--amber));box-shadow:0 0 12px color-mix(in srgb,var(--amber) 55%,transparent)}
+  .prob-bar .away{background:linear-gradient(90deg,var(--teal),color-mix(in srgb,var(--teal) 65%,#fff))}
+  .prob-bar .home,.prob-bar .away{transition:width .6s ease}
+
+  .table-wrap{border-radius:16px}
+  table.stat th{background:var(--wash);font-weight:700}
+  table.stat tr:hover td{background:var(--wash)}
+
+  .headline{border-left-width:5px;border-radius:14px;transition:transform .15s}
+  .headline:hover{transform:translateX(4px)}
+  .player{border-radius:18px;transition:transform .15s,box-shadow .15s}
+  .player:hover{transform:translateY(-2px)}
+  .avatar{box-shadow:0 4px 14px rgba(0,0,0,.4);border:2px solid var(--line)}
+  .pd-head{border-radius:22px}
+  .gd-score{border-radius:22px;justify-content:center}
+  .gd-team{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .gd-num{font-family:'Space Grotesk',var(--mono);letter-spacing:-.03em;
+    text-shadow:0 0 26px color-mix(in srgb,var(--amber) 50%,transparent)}
+  .feed{border-radius:16px}
+  .fplay:hover{background:var(--wash)}
+
+  #teamThemeBar{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+  .team-b{width:42px;height:42px;border-radius:13px;border:1px solid var(--line);
+    background:var(--wash);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+    backdrop-filter:blur(8px);transition:transform .15s,border-color .15s,box-shadow .15s}
+  .team-b:hover{transform:translateY(-2px) scale(1.07)}
+  .team-b.on{border-color:var(--amber);box-shadow:0 0 0 3px color-mix(in srgb,var(--amber) 35%,transparent),0 0 18px color-mix(in srgb,var(--amber) 40%,transparent)}
+  .team-b .tlwrap{margin-right:0}
+  .theme-b{background:var(--wash);backdrop-filter:blur(8px)}
+  .theme-b:hover{transform:translateY(-2px) scale(1.08)}
+
+  footer{opacity:.75;margin-top:44px}
+  @media (max-width:520px){
+    .wrap{padding:14px 10px 44px}
+    header{padding:20px 18px;border-radius:18px}
+    .game{padding:14px 15px;border-radius:16px}
+    .gd-num{font-size:30px}
+  }
+
+  /* ===== v9 結構重排 ===== */
+  /* 頁首:精簡橫列 */
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;padding:16px 22px;border-radius:18px}
+  .eyebrow{display:none}
+  h1{font-size:clamp(22px,3vw,28px);margin:0;flex:0 0 auto}
+  header .searchbar{flex:1 1 260px;margin:0;order:2}
+  header .datebar{flex:1 1 100%;order:3;margin-top:2px;background:transparent;border:none;box-shadow:none;padding:6px 0}
+  #themeBar{order:4;margin-top:2px}
+  #themeBar~div{order:5}
+  .score-row{order:1;margin:0;margin-left:auto;gap:8px}
+  .stat{min-width:auto;padding:8px 14px;border-radius:12px}
+  .stat .num{font-size:20px}
+  .stat .lbl{font-size:10px}
+  /* 球隊主題列:單行橫向捲動 */
+  #teamThemeBar{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+  .team-b{flex:0 0 42px}
+
+  /* 桌面:雙欄儀表板 */
+  @media(min-width:960px){
+    #homeView{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+    #homeView>section{grid-column:2;margin:0}
+    #homeView>section:has(#games){grid-column:1;grid-row:1/span 12}
+    #homeView .sec-head{margin:4px 0 12px}
+    /* 主欄:比賽卡雙欄網格 */
+    #games{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+    #games .game{margin:0;height:100%}
+    #games .empty{grid-column:1/-1}
+    /* 側欄卡片更緊湊 */
+    #aiSec .analysis,#txSec .headline,#headlineSec .headline{font-size:13.5px}
+  }
+  @media(max-width:959px){
+    #games{display:flex;flex-direction:column;gap:14px}
+    #games .game{margin:0}
+  }
+</style>
 </head>
 <body>
 <canvas id="fx"></canvas>
+<div id="teamBg"></div>
 <div class="wrap">
   <header>
     <div class="eyebrow">Daily Baseball Model · 點隊名看名單 · 可搜尋球員</div>
@@ -317,6 +460,13 @@
       <button class="btn" id="loadBtn"><span class="ico">⟳</span><span>載入</span></button>
     </div>
     <div id="themeBar"></div>
+    <div style="margin-top:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-family:var(--cond);letter-spacing:.1em;font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:600">球隊主題</span>
+        <button class="today-btn" id="ttClear" style="padding:4px 12px;font-size:12px">一般主題</button>
+      </div>
+      <div id="teamThemeBar"></div>
+    </div>
     <div class="score-row" id="statRow">
       <div class="stat"><div class="num" id="dayPct">—</div><div class="lbl">當日命中率</div></div>
       <div class="stat"><div class="num small" id="dayRec">—</div><div class="lbl">命中 / 已完賽</div></div>
@@ -393,7 +543,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v5.4</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.0</footer>
 </div>
 
 <script>
@@ -650,7 +800,7 @@ function review(g,p){
 
 /* ---------- 首頁渲染 ---------- */
 let curGames=[],curPreds=[];
-function teamLink(id,name){return `<span class="nm" data-team="${id}">${esc(name)}</span>`;}
+function teamLink(id,name){return `<span class="crest">${teamLogo(id,30)}</span><span class="nm" data-team="${id}">${esc(name)}</span>`;}
 /* 即時戰況:依比分/局數/出局換算當下勝率 */
 function liveWinProb(diff,curInn,isTop,outs,m0){
   const outsDone=Math.max(0,(curInn-1)*6+(isTop?0:3)+(outs||0));
@@ -927,6 +1077,41 @@ function evalPitcher(st,age){
   const line=`ERA ${st.era||'-'} · WHIP ${st.whip||'-'} · ${ip} IP · K/9 ${k9.toFixed(1)} · BB/9 ${bb9.toFixed(1)}${sv?` · ${sv} SV`:''}`;
   return {S,W,star,pot,line,small:ip<20};
 }
+const TEAM_ID={109:{ab:"ARI",c1:"#E03A53",c2:"#C8A96A"},144:{ab:"ATL",c1:"#E8384F",c2:"#3A5FA8"},110:{ab:"BAL",c1:"#FF7A2E",c2:"#FFB13C"},111:{ab:"BOS",c1:"#E8384F",c2:"#B3324A"},112:{ab:"CHC",c1:"#2E6DB4",c2:"#E8384F"},145:{ab:"CWS",c1:"#6B7683",c2:"#AEB8C2"},113:{ab:"CIN",c1:"#EE3A3A",c2:"#F26B6B"},114:{ab:"CLE",c1:"#2E5FA8",c2:"#E8384F"},115:{ab:"COL",c1:"#7B5FC4",c2:"#C4CED4"},116:{ab:"DET",c1:"#2E6DB4",c2:"#FF6B3D"},117:{ab:"HOU",c1:"#FF7F2A",c2:"#F4B942"},118:{ab:"KC",c1:"#2E7FD4",c2:"#D8B863"},108:{ab:"LAA",c1:"#E8384F",c2:"#2E6DB4"},119:{ab:"LAD",c1:"#2E6DB4",c2:"#5B9BD5"},146:{ab:"MIA",c1:"#2AB6E8",c2:"#F14B5A"},158:{ab:"MIL",c1:"#2E6DB4",c2:"#FFD23F"},142:{ab:"MIN",c1:"#2E6DB4",c2:"#E8546B"},121:{ab:"NYM",c1:"#2E6DB4",c2:"#FF7A2E"},147:{ab:"NYY",c1:"#2E5AA0",c2:"#7C93B8"},133:{ab:"ATH",c1:"#2E9E6B",c2:"#F4C842"},143:{ab:"PHI",c1:"#EE3A4E",c2:"#4A7FD4"},134:{ab:"PIT",c1:"#FFC22E",c2:"#5A5A52"},135:{ab:"SD",c1:"#8B6F3E",c2:"#FFC94A"},137:{ab:"SF",c1:"#FF7043",c2:"#FDB44B"},136:{ab:"SEA",c1:"#2E7F8C",c2:"#4FB8C4"},138:{ab:"STL",c1:"#E8384F",c2:"#3A5FA8"},139:{ab:"TB",c1:"#2E6DB4",c2:"#7FC4E8"},140:{ab:"TEX",c1:"#2E6DB4",c2:"#E8384F"},141:{ab:"TOR",c1:"#2E7FD4",c2:"#4FC3F7"},120:{ab:"WSH",c1:"#E8384F",c2:"#4A6BA8"}};
+function teamCrest(id,size){
+  const t=TEAM_ID[id]; const s=size||64;
+  if(!t)return `<span style="display:inline-block;width:${s}px;height:${s}px"></span>`;
+  return `<svg viewBox="0 0 64 64" width="${s}" height="${s}" style="flex:0 0 ${s}px;vertical-align:middle;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))">
+    <defs>
+      <linearGradient id="g${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${t.c1}"/><stop offset="1" stop-color="${t.c2}"/>
+      </linearGradient>
+      <clipPath id="cl${id}"><circle cx="32" cy="32" r="28"/></clipPath>
+    </defs>
+    <circle cx="32" cy="32" r="31" fill="#ffffff"/>
+    <circle cx="32" cy="32" r="28" fill="url(#g${id})"/>
+    <g clip-path="url(#cl${id})">
+      <path d="M-4 40 L68 14 L68 24 L-4 50 Z" fill="#ffffff" opacity=".2"/>
+      <ellipse cx="32" cy="15" rx="30" ry="13" fill="#ffffff" opacity=".22"/>
+    </g>
+    <circle cx="32" cy="32" r="28" fill="none" stroke="#ffffff" stroke-width="3"/>
+    <text x="32" y="40" text-anchor="middle" font-size="19" font-weight="800"
+      font-family="'Barlow Condensed',Arial,sans-serif" fill="#ffffff"
+      stroke="rgba(0,0,0,.32)" stroke-width="0.7" paint-order="stroke" letter-spacing="-.5">${t.ab}</text>
+  </svg>`;
+}
+function teamLogo(id,size){
+  const s=size||28;
+  if(!TEAM_ID[id])return teamCrest(id,s);
+  const px=s<=40?64:(s<=80?128:256);
+  return `<span class="tlwrap" style="width:${s}px;height:${s}px;flex:0 0 ${s}px">
+    <img class="tlogo" src="https://midfield.mlbstatic.com/v1/team/${id}/spots/${px}"
+      alt="" loading="lazy" referrerpolicy="no-referrer"
+      style="width:${s}px;height:${s}px"
+      onerror="if(!this.dataset.f){this.dataset.f=1;this.src='https://www.mlbstatic.com/team-logos/${id}.svg';}else{this.style.display='none';this.nextElementSibling.style.display='inline-block';}">
+    <span style="display:none">${teamCrest(id,s)}</span>
+  </span>`;
+}
 function headshot(pid,size){
   return `https://img.mlbstatic.com/mlb-photos/image/upload/w_${size||120},q_auto:best/v1/people/${pid}/headshot/67/current`;
 }
@@ -969,7 +1154,7 @@ function playerCard(entry){
 async function showTeam(teamId,teamName,fromPop){
   if(!fromPop)history.pushState({v:'team',id:teamId,name:teamName},'');
   showView('team');
-  $('teamTitle').textContent=teamName||'球隊名單';
+  $('teamTitle').innerHTML=`<span style="display:inline-flex;align-items:center;gap:12px">${teamLogo(teamId,52)}${esc(teamName||'球隊名單')}</span>`;
   $('teamTag').textContent='現役名單(即時)';
   $('roster').innerHTML='<div class="empty">載入名單與本季數據中…</div>';
   try{
@@ -1301,12 +1486,12 @@ async function loadGame(gid){
     $('gdTag').textContent=st==='Live'?'每 20 秒自動更新':'';
     $('gameDetail').innerHTML=`
       <div class="gd-score">
-        <div class="gd-team"><div class="gnm" data-team="${away.id}">${esc(away.teamName||away.name||'客')}</div>
+        <div class="gd-team">${teamLogo(away.id,52)}<div class="gnm" data-team="${away.id}">${esc(away.teamName||away.name||'客')}</div>
           <div class="grec">${esc(away.record?`${away.record.wins}-${away.record.losses}`:'')}</div></div>
         <div class="gd-num ${aR>hR?'lead':''}">${aR}</div>
         <div class="gd-mid">${st==='Live'?`<span class="pill live"><span class="dot"></span>${innTxt}</span>`:`<span class="pill wait">${esc(innTxt)}</span>`}</div>
         <div class="gd-num ${hR>aR?'lead':''}">${hR}</div>
-        <div class="gd-team"><div class="gnm" data-team="${home.id}">${esc(home.teamName||home.name||'主')}</div>
+        <div class="gd-team">${teamLogo(home.id,52)}<div class="gnm" data-team="${home.id}">${esc(home.teamName||home.name||'主')}</div>
           <div class="grec">${esc(home.record?`${home.record.wins}-${home.record.losses}`:'')}</div></div>
       </div>
       ${lineTable}
@@ -1823,7 +2008,7 @@ async function showStandings(fromPop){
         const zhStreak=streak.startsWith('W')?streak.replace('W','')+'連勝':streak.startsWith('L')?streak.replace('L','')+'連敗':streak;
         const lead=i===0;
         return `<tr>
-          <td><span class="pnm" data-team="${t.team.id}" style="cursor:pointer;${lead?'color:var(--amber);font-weight:700':''}">${esc(t.team.name)}</span></td>
+          <td style="display:flex;align-items:center;gap:8px">${teamLogo(t.team.id,28)}<span class="pnm" data-team="${t.team.id}" style="cursor:pointer;${lead?'color:var(--amber);font-weight:700':''}">${esc(t.team.name)}</span></td>
           <td>${t.wins}</td><td>${t.losses}</td>
           <td>${esc(t.winningPercentage||'')}</td>
           <td>${esc(t.gamesBack==='-'?'—':t.gamesBack)}</td>
@@ -1846,6 +2031,8 @@ $('stBackBtn').addEventListener('click',()=>history.back());
 
 /* ---------- 背景主題(動畫粒子) ---------- */
 const THEMES=[
+  {id:'aurora',emoji:'🔮',name:'極光玻璃',pal:{field:'#12112c',panel:'rgba(255,255,255,.06)',panel2:'rgba(255,255,255,.10)',glow:'#241d54',amber:'#A78BFF',teal:'#4EC9FF',chalk:'#F2F3FA',muted:'#9BA3C7',line:'rgba(255,255,255,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.15)',ink2:'#D9DCEE',btnInk:'#0e0d24'}},
+  {id:'paper',emoji:'📰',name:'典雅日刊',light:true,pal:{field:'#F5F1E8',panel:'#FFFFFF',panel2:'#FAF7EF',glow:'#EAE0C8',amber:'#E4572E',teal:'#1D6A96',chalk:'#20242B',muted:'#6B7280',line:'rgba(32,36,43,.13)',wash:'rgba(32,36,43,.05)',wash2:'rgba(32,36,43,.11)',ink2:'#3A4149',btnInk:'#ffffff'}},
   {id:'night',emoji:'🌙',name:'夜場經典',pal:{field:'#0c1a2b',panel:'#14283d',panel2:'#1a3149',glow:'#163150',amber:'#ffc247',teal:'#4ecac1',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
   {id:'fireworks',emoji:'🎆',name:'滿貫煙火',pal:{field:'#0a1020',panel:'#131c33',panel2:'#182342',glow:'#1a2a55',amber:'#ffcf5c',teal:'#7ab8ff',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
   {id:'dusk',emoji:'🌇',name:'黃昏開球',pal:{field:'#1d1226',panel:'#2b1b33',panel2:'#35213d',glow:'#5a2b3f',amber:'#ffd27d',teal:'#ffab76',chalk:'#eef4f1',muted:'#8299ac',line:'rgba(226,236,232,.14)',wash:'rgba(255,255,255,.07)',wash2:'rgba(255,255,255,.13)',ink2:'#d6e0da',btnInk:'#0c1a2b'}},
@@ -1854,7 +2041,12 @@ const THEMES=[
   {id:'daysky',emoji:'☀️',name:'日場藍天',light:true,pal:{field:'#d8e9f7',panel:'#ffffff',panel2:'#edf5fc',glow:'#b7d8f2',amber:'#d97706',teal:'#0f766e',chalk:'#12283a',muted:'#5b7286',line:'rgba(18,40,58,.16)',wash:'rgba(18,40,58,.06)',wash2:'rgba(18,40,58,.13)',ink2:'#2c3e4a',btnInk:'#ffffff'}},
   {id:'grass',emoji:'🌿',name:'綠茵日場',light:true,pal:{field:'#e7efdb',panel:'#ffffff',panel2:'#f2f7e9',glow:'#cbe2b4',amber:'#b45309',teal:'#15803d',chalk:'#1e2c1a',muted:'#5c6f56',line:'rgba(30,44,26,.16)',wash:'rgba(30,44,26,.06)',wash2:'rgba(30,44,26,.13)',ink2:'#33422e',btnInk:'#ffffff'}},
   {id:'cream',emoji:'🧢',name:'復古奶油',light:true,pal:{field:'#f4ecdd',panel:'#fffdf6',panel2:'#f6f0e2',glow:'#e9d5b0',amber:'#c2410c',teal:'#0e7490',chalk:'#33261a',muted:'#77664f',line:'rgba(51,38,26,.16)',wash:'rgba(51,38,26,.06)',wash2:'rgba(51,38,26,.13)',ink2:'#4a3a29',btnInk:'#ffffff'}}];
-let fxTheme=localStorage.getItem('mlb_theme')||'night';
+if(localStorage.getItem('mlb_design_v')!=='9'){
+  localStorage.setItem('mlb_design_v','9');
+  localStorage.removeItem('mlb_theme');
+  localStorage.removeItem('mlb_teamtheme');
+}
+let fxTheme=localStorage.getItem('mlb_theme')||'aurora';
 if(!THEMES.some(t=>t.id===fxTheme))fxTheme='night';
 const fxCanvas=document.getElementById('fx');
 const fxCtx=fxCanvas.getContext('2d');
@@ -1875,10 +2067,11 @@ function fxInit(){
   }else if(fxTheme==='storm'){
     for(let i=0;i<n*1.6;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
       vy:rnd(560,920),vx:-rnd(30,80),o:rnd(.1,.28)});
-  }else if(fxTheme==='neon'){
+  }else if(fxTheme==='neon'||fxTheme==='aurora'){
+    const cols=fxTheme==='aurora'?['167,139,255','78,201,255']:['255,110,199','0,229,255'];
     for(let i=0;i<n*.8;i++)fxParts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),
-      r:rnd(1.5,4),vx:rnd(-10,10),vy:rnd(-6,6),o:rnd(.12,.4),
-      c:Math.random()<.5?'255,110,199':'0,229,255',tw:rnd(0,6.28)});
+      r:rnd(1.5,4.5),vx:rnd(-8,8),vy:rnd(-5,5),o:rnd(.1,.35),
+      c:cols[Math.random()<.5?0:1],tw:rnd(0,6.28)});
   }else if(fxTheme==='daysky'){
     for(let i=0;i<Math.max(5,n*0.16);i++)fxParts.push({x:rnd(-80,innerWidth),y:rnd(20,innerHeight*.55),
       s:rnd(.6,1.7),v:rnd(7,18),o:rnd(.3,.5)});
@@ -1948,7 +2141,7 @@ function fxTick(t){
       const o=Math.min(.22,.22*pr*flick);
       fxCtx.fillStyle=`rgba(215,230,255,${o})`;fxCtx.fillRect(0,0,W,H);
     }
-  }else if(fxTheme==='neon'){
+  }else if(fxTheme==='neon'||fxTheme==='aurora'){
     fxParts.forEach(p=>{
       p.tw+=dt*2.2;p.x+=p.vx*dt;p.y+=p.vy*dt;
       if(p.x<-10)p.x=W+10;if(p.x>W+10)p.x=-10;
@@ -1999,6 +2192,9 @@ function fxTick(t){
 }
 function applyTheme(id){
   fxTheme=id;localStorage.setItem('mlb_theme',id);
+  localStorage.removeItem('mlb_teamtheme');
+  document.querySelectorAll('.team-b').forEach(b=>b.classList.remove('on'));
+  {const tbg=document.getElementById('teamBg');if(tbg)tbg.innerHTML='';}
   const th=THEMES.find(t=>t.id===id)||THEMES[0];
   const r=document.documentElement.style;
   r.setProperty('--field',th.pal.field);
@@ -2018,14 +2214,61 @@ function applyTheme(id){
   document.querySelectorAll('.theme-b').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
   cancelAnimationFrame(fxRAF);fxRAF=null;
   fxCtx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
-  if(id==='night'||reduceMotion)return;
+  if(id==='night'||id==='paper'||reduceMotion)return;
+  if(id==='aurora'&&reduceMotion)return;
   fxInit();fxLast=0;fxRAF=requestAnimationFrame(fxTick);
 }
 const tb=document.getElementById('themeBar');
 tb.innerHTML='<span style="font-family:var(--cond);letter-spacing:.1em;font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:600">背景</span>'
   +THEMES.map(t=>`<button class="theme-b" data-t="${t.id}" title="${t.name}">${t.emoji}</button>`).join('');
 tb.querySelectorAll('.theme-b').forEach(b=>b.addEventListener('click',()=>applyTheme(b.dataset.t)));
-applyTheme(fxTheme);
+
+/* 球隊主題:選一隊,整站配色套用該隊代表色(疊在暗底上) */
+const TEAM_NAMES={109:'響尾蛇',144:'勇士',110:'金鶯',111:'紅襪',112:'小熊',145:'白襪',113:'紅人',114:'守護者',115:'落磯',116:'老虎',117:'太空人',118:'皇家',108:'天使',119:'道奇',146:'馬林魚',158:'釀酒人',142:'雙城',121:'大都會',147:'洋基',133:'運動家',143:'費城人',134:'海盜',135:'教士',137:'巨人',136:'水手',138:'紅雀',139:'光芒',140:'遊騎兵',141:'藍鳥',120:'國民'};
+function hexMix(hex,target,t){const c=hex.replace('#','');const n=c.length===3?c.split('').map(x=>x+x).join(''):c;
+  const r=parseInt(n.slice(0,2),16),g=parseInt(n.slice(2,4),16),b=parseInt(n.slice(4,6),16);
+  const tr=(target>>16)&255,tg=(target>>8)&255,tb2=target&255;
+  const mix=(a,b)=>Math.round(a+(b-a)*t);
+  return `#${[mix(r,tr),mix(g,tg),mix(b,tb2)].map(v=>v.toString(16).padStart(2,'0')).join('')}`;}
+function applyTeamTheme(id){
+  const t=TEAM_ID[id];
+  localStorage.setItem('mlb_teamtheme',id||'');
+  if(!id||!t){document.documentElement.style.removeProperty('--field');
+    document.querySelectorAll('.team-b').forEach(b=>b.classList.remove('on'));
+    const tbg0=document.getElementById('teamBg');if(tbg0)tbg0.innerHTML='';
+    applyTheme(fxTheme);
+    document.querySelectorAll('.theme-b').forEach(b=>b.classList.toggle('on',b.dataset.t===fxTheme));return;}
+  const r=document.documentElement.style;
+  // 亮色調:隊主色極淡當背景,白卡片,主色深字當點綴
+  r.setProperty('--field',hexMix(t.c1,0xffffff,.82));
+  r.setProperty('--panel','#ffffff');
+  r.setProperty('--panel-2',hexMix(t.c1,0xffffff,.90));
+  r.setProperty('--glow-top',hexMix(t.c1,0xffffff,.62));
+  r.setProperty('--amber',hexMix(t.c2,0x000000,.15));
+  r.setProperty('--teal',hexMix(t.c1,0x000000,.10));
+  r.setProperty('--chalk',hexMix(t.c1,0x000000,.72));
+  r.setProperty('--muted',hexMix(t.c1,0x000000,.42));
+  r.setProperty('--line',hexMix(t.c1,0xffffff,.55));
+  r.setProperty('--wash',hexMix(t.c1,0xffffff,.80));
+  r.setProperty('--wash2',hexMix(t.c1,0xffffff,.68));
+  r.setProperty('--ink2',hexMix(t.c1,0x000000,.60));
+  r.setProperty('--btn-ink','#ffffff');
+  document.documentElement.style.colorScheme='light';
+  document.querySelectorAll('.theme-b').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.team-b').forEach(b=>b.classList.toggle('on',+b.dataset.tid===id));
+  const tbg=document.getElementById('teamBg');
+  if(tbg)tbg.innerHTML=`<img src="https://midfield.mlbstatic.com/v1/team/${id}/spots/256" referrerpolicy="no-referrer" alt="" onerror="this.remove()">`;
+}
+const ttb=document.getElementById('teamThemeBar');
+if(ttb){
+  const opts=Object.entries(TEAM_NAMES).sort((a,b)=>TEAM_ID[a[0]].ab.localeCompare(TEAM_ID[b[0]].ab));
+  ttb.innerHTML=opts.map(([id,nm])=>`<button class="team-b" data-tid="${id}" title="${nm} ${TEAM_ID[id].ab}">${teamLogo(+id,28)}</button>`).join('');
+  ttb.querySelectorAll('.team-b').forEach(b=>b.addEventListener('click',()=>applyTeamTheme(+b.dataset.tid)));
+  document.getElementById('ttClear').addEventListener('click',()=>applyTeamTheme(null));
+}
+const savedTeam=localStorage.getItem('mlb_teamtheme');
+if(savedTeam&&TEAM_ID[+savedTeam])applyTeamTheme(+savedTeam);
+else applyTheme(fxTheme);
 
 /* ---------- 區塊收合 ---------- */
 function initCollapsibles(ids){
