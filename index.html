@@ -401,39 +401,21 @@
     .gd-num{font-size:30px}
   }
 
-  /* ===== v9 結構重排 ===== */
-  /* 頁首:精簡橫列 */
-  header{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;padding:16px 22px;border-radius:18px}
-  .eyebrow{display:none}
-  h1{font-size:clamp(22px,3vw,28px);margin:0;flex:0 0 auto}
-  header .searchbar{flex:1 1 260px;margin:0;order:2}
-  header .datebar{flex:1 1 100%;order:3;margin-top:2px;background:transparent;border:none;box-shadow:none;padding:6px 0}
-  #themeBar{order:4;margin-top:2px}
-  #themeBar~div{order:5}
-  .score-row{order:1;margin:0;margin-left:auto;gap:8px}
-  .stat{min-width:auto;padding:8px 14px;border-radius:12px}
-  .stat .num{font-size:20px}
-  .stat .lbl{font-size:10px}
-  /* 球隊主題列:單行橫向捲動 */
+  /* ===== v9.1 版面整理(安全版) ===== */
+  .wrap{max-width:980px}
+  header{padding:20px 24px;border-radius:20px}
+  h1{font-size:clamp(24px,3.6vw,32px)}
+  .score-row{gap:10px;margin-top:14px}
+  .stat{min-width:auto;padding:9px 16px;border-radius:12px}
+  .stat .num{font-size:22px}
+  .stat .lbl{font-size:10.5px}
   #teamThemeBar{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
   .team-b{flex:0 0 42px}
-
-  /* 桌面:雙欄儀表板 */
-  @media(min-width:960px){
-    #homeView{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
-    #homeView>section{grid-column:2;margin:0}
-    #homeView>section:has(#games){grid-column:1;grid-row:1/span 12}
-    #homeView .sec-head{margin:4px 0 12px}
-    /* 主欄:比賽卡雙欄網格 */
-    #games{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
-    #games .game{margin:0;height:100%}
+  @media(min-width:820px){
+    #games{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch}
+    #games .game{margin:0;height:100%;display:flex;flex-direction:column}
+    #games .game .why{margin-top:auto}
     #games .empty{grid-column:1/-1}
-    /* 側欄卡片更緊湊 */
-    #aiSec .analysis,#txSec .headline,#headlineSec .headline{font-size:13.5px}
-  }
-  @media(max-width:959px){
-    #games{display:flex;flex-direction:column;gap:14px}
-    #games .game{margin:0}
   }
 </style>
 </head>
@@ -543,7 +525,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.0</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.1</footer>
 </div>
 
 <script>
