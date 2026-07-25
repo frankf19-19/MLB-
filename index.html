@@ -401,6 +401,23 @@
     .gd-num{font-size:30px}
   }
 
+  /* ===== v9.5 活潑層 ===== */
+  @media (prefers-reduced-motion:no-preference){
+    @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+    #games .game,.headline,.player{animation:fadeUp .45s ease both}
+    #games .game:nth-child(2){animation-delay:.05s}
+    #games .game:nth-child(3){animation-delay:.10s}
+    #games .game:nth-child(4){animation-delay:.15s}
+    #games .game:nth-child(5){animation-delay:.20s}
+    #games .game:nth-child(6){animation-delay:.25s}
+    header{position:relative;overflow:hidden}
+    header::after{content:"";position:absolute;top:0;left:0;right:0;height:3px;
+      background:linear-gradient(90deg,var(--amber),var(--teal),var(--amber));
+      background-size:200% 100%;animation:flowbar 7s linear infinite}
+    @keyframes flowbar{to{background-position:200% 0}}
+    .stat .num{transition:transform .2s}
+    .stat:hover .num{transform:scale(1.08)}
+  }
   /* ===== v9.1 版面整理(安全版) ===== */
   .wrap{max-width:980px}
   header{padding:20px 24px;border-radius:20px}
@@ -562,7 +579,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.4</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.5</footer>
 </div>
 
 <script>
@@ -2276,20 +2293,24 @@ function applyTeamTheme(id){
     const tbg0=document.getElementById('teamBg');if(tbg0)tbg0.innerHTML='';
     applyTheme(fxTheme);
     document.querySelectorAll('.theme-b').forEach(b=>b.classList.toggle('on',b.dataset.t===fxTheme));return;}
+  const hexLum=hex=>{const c=hex.replace('#','');const n=c.length===3?c.split('').map(x=>x+x).join(''):c;
+    const [r2,g2,b2]=[0,2,4].map(i=>parseInt(n.slice(i,i+2),16)/255);
+    return .2126*r2+.7152*g2+.0722*b2;};
+  const vivid=hex=>hexLum(hex)>.6?hexMix(hex,0x000000,.32):hex; // 太亮的隊色壓深,確保白底上看得清
   const r=document.documentElement.style;
-  // 亮色調:隊主色極淡當背景,白卡片,主色深字當點綴
-  r.setProperty('--field',hexMix(t.c1,0xffffff,.82));
+  // 精緻版:乾淨近白底 + 純白卡片,隊色全飽和只打在重點
+  r.setProperty('--field','#F4F6FB');
   r.setProperty('--panel','#ffffff');
-  r.setProperty('--panel-2',hexMix(t.c1,0xffffff,.90));
-  r.setProperty('--glow-top',hexMix(t.c1,0xffffff,.62));
-  r.setProperty('--amber',hexMix(t.c2,0x000000,.15));
-  r.setProperty('--teal',hexMix(t.c1,0x000000,.10));
-  r.setProperty('--chalk',hexMix(t.c1,0x000000,.72));
-  r.setProperty('--muted',hexMix(t.c1,0x000000,.42));
-  r.setProperty('--line',hexMix(t.c1,0xffffff,.55));
-  r.setProperty('--wash',hexMix(t.c1,0xffffff,.80));
-  r.setProperty('--wash2',hexMix(t.c1,0xffffff,.68));
-  r.setProperty('--ink2',hexMix(t.c1,0x000000,.60));
+  r.setProperty('--panel-2',hexMix(t.c1,0xffffff,.93));
+  r.setProperty('--glow-top',hexMix(t.c1,0xffffff,.70));
+  r.setProperty('--amber',vivid(t.c1));
+  r.setProperty('--teal',vivid(t.c2));
+  r.setProperty('--chalk','#151E28');
+  r.setProperty('--muted','#5B6B7B');
+  r.setProperty('--line','rgba(21,30,40,.12)');
+  r.setProperty('--wash',hexMix(t.c1,0xffffff,.94));
+  r.setProperty('--wash2',hexMix(t.c1,0xffffff,.85));
+  r.setProperty('--ink2','#2C3A46');
   r.setProperty('--btn-ink','#ffffff');
   document.documentElement.style.colorScheme='light';
   document.querySelectorAll('.theme-b').forEach(b=>b.classList.remove('on'));
