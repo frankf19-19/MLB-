@@ -584,7 +584,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分與球場得分因子(靜態概略值),σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.6</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、主客場拆分與牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.0</footer>
 </div>
 
 <script>
@@ -646,7 +646,7 @@ async function fetchPitcherStats(ids,season,endDate){
     const era=parseFloat(st.era), ip=parseFloat(st.inningsPitched);
     const w=parseInt(st.wins), l=parseInt(st.losses);
     if(isFinite(era)&&isFinite(ip)){out[p.id]=out[p.id]||{};out[p.id][key]={era,ip,
-      w:isFinite(w)?w:null,l:isFinite(l)?l:null};}});};
+      w:isFinite(w)?w:null,l:isFinite(l)?l:null};out[p.id].hand=p.pitchHand?.code||out[p.id].hand;}});};
   try{
     parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${season}-01-01,endDate=${endDate},season=${season})`),'season');
   }catch(e){}
@@ -688,6 +688,26 @@ async function fetchTeamExtras(season,asOf){
     const v=Object.values(ex.map).map(t=>t.bpEra).filter(isFinite);
     if(v.length)ex.lgBpEra=v.reduce((a,b)=>a+b,0)/v.length;
   }catch(e){}
+  // 打線對左/右投拆分(本季累計)
+  try{
+    const d=await jget(`${API}/teams/stats?sportId=1&group=hitting&stats=statSplits&sitCodes=vl,vr&season=${season}`);
+    ((d.stats||[])[0]?.splits||[]).forEach(s=>{
+      const id=s.team?.id,ops=parseFloat(s.stat?.ops),code=s.split?.code||s.split?.description||'';
+      if(id&&isFinite(ops)){if(/vl/i.test(code))put(id,'vsL',ops);else if(/vr/i.test(code))put(id,'vsR',ops);}});
+  }catch(e){}
+  // 主客場攻守拆分(本季累計,得/失分每場)
+  try{
+    const d=await jget(`${API}/teams/stats?sportId=1&group=hitting&stats=statSplits&sitCodes=h,a&season=${season}`);
+    ((d.stats||[])[0]?.splits||[]).forEach(s=>{
+      const id=s.team?.id,r=parseFloat(s.stat?.runs),gp=parseFloat(s.stat?.gamesPlayed),code=s.split?.code||'';
+      if(id&&isFinite(r)&&gp>=8){if(/^h/i.test(code))put(id,'homeRSg',r/gp);else if(/^a/i.test(code))put(id,'awayRSg',r/gp);}});
+  }catch(e){}
+  try{
+    const d=await jget(`${API}/teams/stats?sportId=1&group=pitching&stats=statSplits&sitCodes=h,a&season=${season}`);
+    ((d.stats||[])[0]?.splits||[]).forEach(s=>{
+      const id=s.team?.id,r=parseFloat(s.stat?.runs),gp=parseFloat(s.stat?.gamesPlayed),code=s.split?.code||'';
+      if(id&&isFinite(r)&&gp>=8){if(/^h/i.test(code))put(id,'homeRAg',r/gp);else if(/^a/i.test(code))put(id,'awayRAg',r/gp);}});
+  }catch(e){}
   // 近14天攻守(相對 asOf,回看不偷看未來;抓不到就自動略過)
   if(asOf){
     const from=shiftDate(asOf,-13);
@@ -705,6 +725,28 @@ async function fetchTeamExtras(season,asOf){
     }catch(e){}
   }
   return ex;
+}
+
+/* 近3天賽程快取(牛棚疲勞估算用) */
+const schedCache={};
+async function fetchGamesCached(date){
+  if(schedCache[date])return schedCache[date];
+  const g=await fetchGames(date,true);schedCache[date]=g;return g;
+}
+async function bpFatigue(date){
+  const days=[shiftDate(date,-1),shiftDate(date,-2),shiftDate(date,-3)];
+  const packs=await Promise.all(days.map(d=>fetchGamesCached(d).catch(()=>[])));
+  const f={};
+  packs.forEach((games,di)=>games.forEach(g=>{
+    if(g.status!=='Final')return;
+    [g.awayId,g.homeId].forEach(id=>{f[id]=(f[id]||0)+1;});
+    if(di===0){
+      const close=Math.abs((g.homeScore??0)-(g.awayScore??0))<=1;
+      const extra=(g.curInn||9)>9;
+      if(close||extra)[g.awayId,g.homeId].forEach(id=>{f[id]=(f[id]||0)+0.7;});
+    }
+  }));
+  return f;
 }
 
 /* ---------- 預測模型 ---------- */
@@ -736,8 +778,29 @@ function predict(g,pm,lg,ps,ex){
   const defense=(raPg,rec)=>isFinite(rec)?{v:0.7*raPg+0.3*rec,usedRec:true}:{v:raPg,usedRec:false};
   const hOff=offense(hRS,exH.ops,exH.recRSg), aOff=offense(aRS,exA.ops,exA.recRSg);
   const hDef=defense(hRA,exH.recRAg), aDef=defense(aRA,exA.recRAg);
+  const hSt=ps?ps[g.homePitId]:null, aSt=ps?ps[g.awayPitId]:null;
 
-  let expHome=(hOff.v/lg)*(aDef.v/lg)*lg+HOME_RUN_BOOST, expAway=(aOff.v/lg)*(hDef.v/lg)*lg;
+  // ① 對左右投拆分(剋星效應):依對方先發慣用手微調火力(阻尼60%,上限±8%)
+  const platoon=(ex2,oppHand,base)=>{
+    if(!ex2||!oppHand)return {v:base,used:false};
+    const sp=oppHand==='L'?ex2.vsL:ex2.vsR;
+    if(!(isFinite(sp)&&isFinite(ex2.ops)&&ex2.ops>0))return {v:base,used:false};
+    const ratio=Math.max(.92,Math.min(1.08,1+(sp/ex2.ops-1)*0.6));
+    return {v:base*ratio,used:Math.abs(ratio-1)>=.02,ratio};
+  };
+  const hPl=platoon(exH,aSt?.hand,hOff.v), aPl=platoon(exA,hSt?.hand,aOff.v);
+  // ③ 主客場拆分:主隊用主場數據、客隊用客場數據各混 20%
+  const venMix=(base,split)=>isFinite(split)?base*0.8+split*0.2:base;
+  const hOffV=venMix(hPl.v,exH.homeRSg), aOffV=venMix(aPl.v,exA.awayRSg);
+  const hDefV=venMix(hDef.v,exH.homeRAg), aDefV=venMix(aDef.v,exA.awayRAg);
+
+  let expHome=(hOffV/lg)*(aDefV/lg)*lg+HOME_RUN_BOOST, expAway=(aOffV/lg)*(hDefV/lg)*lg;
+
+  // ② 牛棚疲勞:三連戰+昨日惡戰(一分差/延長)→ 對手得分期望 +0.2
+  const fat=ex?.fatigue||{};
+  const tiredH=(fat[g.homeId]||0)>=3.5, tiredA=(fat[g.awayId]||0)>=3.5;
+  if(tiredH)expAway+=0.2;
+  if(tiredA)expHome+=0.2;
 
   // 先發修正(era 已含近30天加權)
   const lgERA=lg*0.92;
@@ -747,7 +810,6 @@ function predict(g,pm,lg,ps,ex){
     let d=(st.era-lgERA)/9*5.8*w*0.5;
     return Math.max(-0.8,Math.min(0.8,d));
   };
-  const hSt=ps?ps[g.homePitId]:null, aSt=ps?ps[g.awayPitId]:null;
   const dHome=stAdj(hSt), dAway=stAdj(aSt);
   if(dHome!=null)expAway+=dHome;
   if(dAway!=null)expHome+=dAway;
@@ -813,6 +875,13 @@ function predict(g,pm,lg,ps,ex){
     why+=`打線 OPS 主 ${exH.ops.toFixed(3)}、客 ${exA.ops.toFixed(3)}(聯盟 ${lgOPS.toFixed(3)})。`;
   }
   why+=pitTxt+bpTxt;
+  if(hPl.used||aPl.used){
+    const seg=[];
+    if(hPl.used)seg.push(`主隊打線對${aSt?.hand==='L'?'左':'右'}投${hPl.ratio>1?'較強':'偏弱'}(×${hPl.ratio.toFixed(2)})`);
+    if(aPl.used)seg.push(`客隊打線對${hSt?.hand==='L'?'左':'右'}投${aPl.ratio>1?'較強':'偏弱'}(×${aPl.ratio.toFixed(2)})`);
+    why+=`左右投拆分:${seg.join('、')}。`;
+  }
+  if(tiredH||tiredA)why+=`牛棚疲勞:${tiredH&&tiredA?'兩隊':tiredH?g.home:g.away}連日征戰且昨日惡戰,守成能力下修(對手 +0.2 分)。`;
   if(pf>=1.05)why+=`此主場為高得分球場(因子 ${pf.toFixed(2)}),雙方得分期望同步上調。`;
   else if(pf<=0.96)why+=`此主場為投手友善球場(因子 ${pf.toFixed(2)}),雙方得分期望同步下調。`;
   why+=`含主場 +0.2 分,修正後得分期望 ${expAway.toFixed(1)}:${expHome.toFixed(1)}(客:主),預期 ${fav} 贏約 ${r1(Math.abs(margin))} 分。`;
@@ -1015,7 +1084,8 @@ async function loadDay(quiet){
   try{
     const asOf=shiftDate(date,-1);
     const season=+date.slice(0,4);
-    const [pm,games,ex]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season,asOf)]);
+    const [pm,games,ex,fatMap]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season,asOf),bpFatigue(date).catch(()=>({}))]);
+    ex.fatigue=fatMap;
     const lg=leagueRPG(pm);
     const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
     const ps=await fetchPitcherStats(pitIds,season,asOf);
@@ -1889,7 +1959,8 @@ async function collectSamples(days,prog){
     const date=shiftDate(etToday(),-i), asOf=shiftDate(date,-1);
     if(prog)prog(i,days,samples.length);
     try{
-      const [pm,games]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date,true)]);
+      const [pm,games,fatMap]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date,true),bpFatigue(date).catch(()=>({}))]);
+      ex.fatigue=fatMap;
       const lg=leagueRPG(pm);
       const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
       const ps=await fetchPitcherStats(pitIds,season,asOf);
