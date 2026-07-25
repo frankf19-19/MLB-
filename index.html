@@ -393,6 +393,10 @@
   .theme-b{background:var(--wash);backdrop-filter:blur(8px)}
   .theme-b:hover{transform:translateY(-2px) scale(1.08)}
 
+  @media(max-width:640px){
+    header,.game,.datebar,.analysis,.headline,.player,.pd-head,.gd-score,.table-wrap,.feed,.zone-box,.empty{
+      backdrop-filter:blur(6px) saturate(1.1);-webkit-backdrop-filter:blur(6px) saturate(1.1)}
+  }
   footer{opacity:.75;margin-top:44px}
   @media (max-width:520px){
     .wrap{padding:14px 10px 44px}
@@ -418,6 +422,7 @@
     .stat .num{transition:transform .2s}
     .stat:hover .num{transform:scale(1.08)}
   }
+  .noanim .game{animation:none!important}
   /* ===== v9.1 版面整理(安全版) ===== */
   .wrap{max-width:980px}
   header{padding:20px 24px;border-radius:20px}
@@ -579,7 +584,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.5</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分與球場得分因子(靜態概略值),σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.6</footer>
 </div>
 
 <script>
@@ -610,8 +615,8 @@ async function fetchStandingsAsOf(date){
       rs:t.runsScored!=null?+t.runsScored:null,ra:t.runsAllowed!=null?+t.runsAllowed:null};}));
   return m;
 }
-async function fetchGames(date){
-  const d=await jget(`${API}/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team,linescore,scoringplays`);
+async function fetchGames(date,lite){
+  const d=await jget(`${API}/schedule?sportId=1&date=${date}&hydrate=probablePitcher,team,linescore${lite?'':',scoringplays'}`);
   const out=[];
   (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(g=>{
     const h=g.teams.home,a=g.teams.away,ls=g.linescore||{};
@@ -788,6 +793,9 @@ function predict(g,pm,lg,ps,ex){
       : `兩隊牛棚水準接近(ERA ${eA.toFixed(2)} vs ${eH.toFixed(2)})。`;
   }else bpTxt='牛棚數據暫缺,本場未做牛棚修正。';
 
+  // 球場因子:主場的得分環境同時影響雙方
+  const pf=PARK_F[g.homeId]||1;
+  if(pf!==1){expHome*=pf;expAway*=pf;}
   const marginPre=expHome-expAway;
   const mid=(expHome+expAway)/2, half=marginPre/2*MARGIN_K;
   expHome=mid+half; expAway=mid-half;
@@ -805,6 +813,8 @@ function predict(g,pm,lg,ps,ex){
     why+=`打線 OPS 主 ${exH.ops.toFixed(3)}、客 ${exA.ops.toFixed(3)}(聯盟 ${lgOPS.toFixed(3)})。`;
   }
   why+=pitTxt+bpTxt;
+  if(pf>=1.05)why+=`此主場為高得分球場(因子 ${pf.toFixed(2)}),雙方得分期望同步上調。`;
+  else if(pf<=0.96)why+=`此主場為投手友善球場(因子 ${pf.toFixed(2)}),雙方得分期望同步下調。`;
   why+=`含主場 +0.2 分,修正後得分期望 ${expAway.toFixed(1)}:${expHome.toFixed(1)}(客:主),預期 ${fav} 贏約 ${r1(Math.abs(margin))} 分。`;
   if(Math.abs(margin)<0.8) why+=`分差不到 1 分,實質接近五五波。`;
   return {home_prob:hp,away_prob:1-hp,predicted_winner:fav,home_score_pred:hs,away_score_pred:as,
@@ -994,6 +1004,7 @@ function buildDailySummary(date,games,preds,reviews,acc){
 }
 
 async function loadDay(quiet){
+  const gEl=$('games');if(gEl)gEl.classList.toggle('noanim',!!quiet);
   quiet=(quiet===true);
   const date=$('datePick').value; if(!date)return;
   if(!quiet)showView('home');
@@ -1114,6 +1125,9 @@ function evalPitcher(st,age){
   return {S,W,star,pot,line,small:ip<20};
 }
 const TEAM_ID={109:{ab:"ARI",c1:"#E03A53",c2:"#C8A96A"},144:{ab:"ATL",c1:"#E8384F",c2:"#3A5FA8"},110:{ab:"BAL",c1:"#FF7A2E",c2:"#FFB13C"},111:{ab:"BOS",c1:"#E8384F",c2:"#B3324A"},112:{ab:"CHC",c1:"#2E6DB4",c2:"#E8384F"},145:{ab:"CWS",c1:"#6B7683",c2:"#AEB8C2"},113:{ab:"CIN",c1:"#EE3A3A",c2:"#F26B6B"},114:{ab:"CLE",c1:"#2E5FA8",c2:"#E8384F"},115:{ab:"COL",c1:"#7B5FC4",c2:"#C4CED4"},116:{ab:"DET",c1:"#2E6DB4",c2:"#FF6B3D"},117:{ab:"HOU",c1:"#FF7F2A",c2:"#F4B942"},118:{ab:"KC",c1:"#2E7FD4",c2:"#D8B863"},108:{ab:"LAA",c1:"#E8384F",c2:"#2E6DB4"},119:{ab:"LAD",c1:"#2E6DB4",c2:"#5B9BD5"},146:{ab:"MIA",c1:"#2AB6E8",c2:"#F14B5A"},158:{ab:"MIL",c1:"#2E6DB4",c2:"#FFD23F"},142:{ab:"MIN",c1:"#2E6DB4",c2:"#E8546B"},121:{ab:"NYM",c1:"#2E6DB4",c2:"#FF7A2E"},147:{ab:"NYY",c1:"#2E5AA0",c2:"#7C93B8"},133:{ab:"ATH",c1:"#2E9E6B",c2:"#F4C842"},143:{ab:"PHI",c1:"#EE3A4E",c2:"#4A7FD4"},134:{ab:"PIT",c1:"#FFC22E",c2:"#5A5A52"},135:{ab:"SD",c1:"#8B6F3E",c2:"#FFC94A"},137:{ab:"SF",c1:"#FF7043",c2:"#FDB44B"},136:{ab:"SEA",c1:"#2E7F8C",c2:"#4FB8C4"},138:{ab:"STL",c1:"#E8384F",c2:"#3A5FA8"},139:{ab:"TB",c1:"#2E6DB4",c2:"#7FC4E8"},140:{ab:"TEX",c1:"#2E6DB4",c2:"#E8384F"},141:{ab:"TOR",c1:"#2E7FD4",c2:"#4FC3F7"},120:{ab:"WSH",c1:"#E8384F",c2:"#4A6BA8"}};
+/* 球場得分因子(概略靜態值,1=中性;>1 打者友善、<1 投手友善) */
+const PARK_F={115:1.18,111:1.06,113:1.06,109:1.03,118:1.03,145:1.03,147:1.03,
+  141:1.02,143:1.02,133:1.02,136:0.94,135:0.96,137:0.96,121:0.97,119:0.98,146:0.97};
 function teamCrest(id,size){
   const t=TEAM_ID[id]; const s=size||64;
   if(!t)return `<span style="display:inline-block;width:${s}px;height:${s}px"></span>`;
@@ -1554,7 +1568,6 @@ async function loadGame(gid){
       ${playFeedHtml(ld.plays?.allPlays)}
       ${boxes}`;
     bindPlayerClicks($('gameDetail'));
-    bindPlayerClicks($('gameDetail'));
     $('gameDetail').querySelectorAll('.gnm[data-team]').forEach(el=>{
       el.addEventListener('click',()=>showTeam(+el.dataset.team,el.textContent));});
     stopGameTimer();
@@ -1666,12 +1679,12 @@ async function showPlayer(pid,fromPop){
   $('playerDetail').innerHTML='<div class="empty">載入球員生涯資料…</div>';
   try{
     const season=+etToday().slice(0,4);
-    const isPitcherPre=true; // 先抓,若非投手 fetchZoneData 會回空陣列
-    const [d,arsenal,zonePts]=await Promise.all([
-      jget(`${API}/people?personIds=${pid}&hydrate=currentTeam,stats(group=[hitting,pitching],type=[yearByYear,career])`),
-      fetchArsenal(pid,season),
-      fetchZoneData(pid,season)]);
+    const d=await jget(`${API}/people?personIds=${pid}&hydrate=currentTeam,stats(group=[hitting,pitching],type=[yearByYear,career])`);
     const p=(d.people||[])[0]; if(!p)throw new Error('查無資料');
+    const isPq=p.primaryPosition?.type==='Pitcher';
+    const [arsenal,zonePts]=await Promise.all([
+      isPq?fetchArsenal(pid,season):Promise.resolve([]),
+      isPq?fetchZoneData(pid,season):Promise.resolve([])]);
     const pos=p.primaryPosition?.abbreviation||'?';
     const cm=ftToCm(p.height), kg=p.weight?Math.round(p.weight*0.4536):null;
     const birthplace=[p.birthCity,p.birthStateProvince,p.birthCountry].filter(Boolean).join(', ');
@@ -1876,7 +1889,7 @@ async function collectSamples(days,prog){
     const date=shiftDate(etToday(),-i), asOf=shiftDate(date,-1);
     if(prog)prog(i,days,samples.length);
     try{
-      const [pm,games]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date)]);
+      const [pm,games]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date,true)]);
       const lg=leagueRPG(pm);
       const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
       const ps=await fetchPitcherStats(pitIds,season,asOf);
@@ -2313,6 +2326,8 @@ function applyTeamTheme(id){
   r.setProperty('--ink2','#2C3A46');
   r.setProperty('--btn-ink','#ffffff');
   document.documentElement.style.colorScheme='light';
+  cancelAnimationFrame(fxRAF);fxRAF=null;
+  fxCtx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
   document.querySelectorAll('.theme-b').forEach(b=>b.classList.remove('on'));
   document.querySelectorAll('.team-b').forEach(b=>b.classList.toggle('on',+b.dataset.tid===id));
   const tbg=document.getElementById('teamBg');
@@ -2428,7 +2443,7 @@ function showHonors(fromPop){
 }
 $('honorBtn').addEventListener('click',()=>showHonors());
 $('hnBackBtn').addEventListener('click',()=>history.back());
-$('hnPrev').addEventListener('click',()=>loadHonors(hnYearCur-1));
+$('hnPrev').addEventListener('click',()=>{if(hnYearCur>1903)loadHonors(hnYearCur-1);});
 $('hnNext').addEventListener('click',()=>{const now=+etToday().slice(0,4);if(hnYearCur<now)loadHonors(hnYearCur+1);});
 
 /* ---------- 我的最愛 ---------- */
