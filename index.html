@@ -409,6 +409,18 @@
   .stat{min-width:auto;padding:9px 16px;border-radius:12px}
   .stat .num{font-size:22px}
   .stat .lbl{font-size:10.5px}
+  .fav-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px 7px 8px;border-radius:999px;
+    background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);
+    cursor:pointer;transition:transform .15s,box-shadow .15s;backdrop-filter:blur(10px)}
+  .fav-chip:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(6,8,24,.3)}
+  .fav-chip img.fava2{width:30px;height:30px;border-radius:50%;object-fit:cover;background:var(--wash)}
+  .fav-chip .fnm{font-size:13.5px;font-weight:600;color:var(--chalk)}
+  .fav-chip .fx2{color:var(--muted);font-size:15px;padding:0 2px;line-height:1}
+  .fav-chip .fx2:hover{color:var(--miss)}
+  .fav-btn{border-radius:11px;background:var(--wash);border:1px solid var(--line);color:var(--chalk);
+    padding:7px 14px;cursor:pointer;font-size:13.5px;font-weight:600;font-family:var(--body)}
+  .fav-btn.on{background:linear-gradient(92deg,var(--amber),color-mix(in srgb,var(--amber) 60%,var(--teal)));
+    color:var(--btn-ink);border:none}
   #teamThemeBar{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
   .team-b{flex:0 0 42px}
   @media(min-width:820px){
@@ -458,6 +470,11 @@
   </header>
 
   <div id="homeView">
+    <section id="favSec" class="hidden">
+      <div class="sec-head"><h2>我的最愛</h2><span class="tag">點頭像/隊徽直達詳細數據</span></div>
+      <div id="favTeams" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="favPlayers" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+    </section>
     <section id="calibSec" class="hidden">
       <div class="sec-head"><h2>模型體檢(校準)</h2><span class="tag">用過去實戰檢驗信心是否誠實</span></div>
       <div class="analysis" style="border-left-color:var(--teal)">
@@ -525,7 +542,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.1</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.2</footer>
 </div>
 
 <script>
@@ -1136,7 +1153,13 @@ function playerCard(entry){
 async function showTeam(teamId,teamName,fromPop){
   if(!fromPop)history.pushState({v:'team',id:teamId,name:teamName},'');
   showView('team');
-  $('teamTitle').innerHTML=`<span style="display:inline-flex;align-items:center;gap:12px">${teamLogo(teamId,52)}${esc(teamName||'球隊名單')}</span>`;
+  $('teamTitle').innerHTML=`<span style="display:inline-flex;align-items:center;gap:12px">${teamLogo(teamId,52)}${esc(teamName||'球隊名單')}
+    <button class="fav-btn ${favHasT(teamId)?'on':''}" id="favBtnT" style="font-size:12.5px;padding:5px 12px">${favHasT(teamId)?'★ 已收藏':'☆ 收藏球隊'}</button></span>`;
+  const fbT=$('favBtnT');
+  if(fbT)fbT.addEventListener('click',e=>{e.stopPropagation();
+    const on=favToggleT(teamId,teamName||'');
+    fbT.classList.toggle('on',on);fbT.textContent=on?'★ 已收藏':'☆ 收藏球隊';
+  });
   $('teamTag').textContent='現役名單(即時)';
   $('roster').innerHTML='<div class="empty">載入名單與本季數據中…</div>';
   try{
@@ -1636,6 +1659,7 @@ async function showPlayer(pid,fromPop){
         <div style="min-width:0">
           <div class="pd-name">${esc(p.fullName)} ${badges.join('')}</div>
           <div class="pd-sub">#${esc(p.primaryNumber||'-')} · ${esc(pos)}${tn?` · <span class="tlink" id="pdTeam">${esc(tn)}</span>`:''}</div>
+          <div style="margin-top:9px"><button class="fav-btn ${favHasP(pid)?'on':''}" id="favBtnP">${favHasP(pid)?'★ 已收藏':'☆ 收藏球員'}</button></div>
         </div>
       </div>
       <div class="bio">
@@ -1657,6 +1681,11 @@ async function showPlayer(pid,fromPop){
       ${tables||'<div class="empty" style="margin-top:12px">查無生涯數據。</div>'}`;
     const tl=$('pdTeam');
     if(tl&&p.currentTeam?.id)tl.addEventListener('click',()=>showTeam(p.currentTeam.id,tn));
+    const fb=$('favBtnP');
+    if(fb)fb.addEventListener('click',()=>{
+      const on=favToggleP(pid,p.fullName);
+      fb.classList.toggle('on',on);fb.textContent=on?'★ 已收藏':'☆ 收藏球員';
+    });
     // 投手進壘點熱區
     if(isP&&window.Chart&&document.getElementById('zoneChart')&&zonePts.length){
       const css=getComputedStyle(document.documentElement);
@@ -2252,6 +2281,37 @@ const savedTeam=localStorage.getItem('mlb_teamtheme');
 if(savedTeam&&TEAM_ID[+savedTeam])applyTeamTheme(+savedTeam);
 else applyTheme(fxTheme);
 
+/* ---------- 我的最愛 ---------- */
+function favGet(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}}
+function favSet(k,v){localStorage.setItem(k,JSON.stringify(v));}
+function favHasP(id){return favGet('mlb_fav_p').some(x=>x.id===id);}
+function favHasT(id){return favGet('mlb_fav_t').some(x=>x.id===id);}
+function favToggleP(id,name){
+  let L=favGet('mlb_fav_p');
+  if(L.some(x=>x.id===id))L=L.filter(x=>x.id!==id);else L.push({id,name});
+  favSet('mlb_fav_p',L.slice(-30));renderFavs();return favHasP(id);
+}
+function favToggleT(id,name){
+  let L=favGet('mlb_fav_t');
+  if(L.some(x=>x.id===id))L=L.filter(x=>x.id!==id);else L.push({id,name});
+  favSet('mlb_fav_t',L.slice(-15));renderFavs();return favHasT(id);
+}
+function renderFavs(){
+  const T=favGet('mlb_fav_t'),P=favGet('mlb_fav_p');
+  const sec=$('favSec');if(!sec)return;
+  if(!T.length&&!P.length){sec.classList.add('hidden');return;}
+  sec.classList.remove('hidden');
+  $('favTeams').innerHTML=T.map(t=>`<span class="fav-chip" data-t="${t.id}" data-n="${esc(t.name)}">
+    ${teamLogo(t.id,30)}<span class="fnm">${esc(t.name)}</span><span class="fx2" data-rmt="${t.id}">✕</span></span>`).join('');
+  $('favPlayers').innerHTML=P.map(p=>`<span class="fav-chip" data-p="${p.id}">
+    <img class="fava2" src="${headshot(p.id,60)}" alt="" loading="lazy"><span class="fnm">${esc(p.name)}</span><span class="fx2" data-rmp="${p.id}">✕</span></span>`).join('');
+  sec.querySelectorAll('[data-rmt]').forEach(x=>x.addEventListener('click',e=>{e.stopPropagation();favToggleT(+x.dataset.rmt,'');}));
+  sec.querySelectorAll('[data-rmp]').forEach(x=>x.addEventListener('click',e=>{e.stopPropagation();favToggleP(+x.dataset.rmp,'');}));
+  sec.querySelectorAll('.fav-chip[data-t]').forEach(c=>c.addEventListener('click',()=>showTeam(+c.dataset.t,c.dataset.n)));
+  sec.querySelectorAll('.fav-chip[data-p]').forEach(c=>c.addEventListener('click',()=>showPlayer(+c.dataset.p)));
+}
+renderFavs();
+
 /* ---------- 區塊收合 ---------- */
 function initCollapsibles(ids){
   ids.forEach(id=>{
@@ -2267,7 +2327,7 @@ function initCollapsibles(ids){
     });
   });
 }
-initCollapsibles(['aiSec','headlineSec','txSec']);
+initCollapsibles(['favSec','aiSec','headlineSec','txSec']);
 
 /* ---------- 瀏覽器上一頁/下一頁支援 ---------- */
 addEventListener('popstate',e=>{
