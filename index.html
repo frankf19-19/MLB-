@@ -409,6 +409,12 @@
   .stat{min-width:auto;padding:9px 16px;border-radius:12px}
   .stat .num{font-size:22px}
   .stat .lbl{font-size:10.5px}
+  .fav-star{position:absolute;top:10px;right:12px;width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--line);background:var(--wash);color:var(--muted);font-size:17px;
+    cursor:pointer;line-height:1;transition:transform .15s,color .15s,background .15s;z-index:2}
+  .fav-star:hover{transform:scale(1.15)}
+  .fav-star.on{color:#fff;background:linear-gradient(135deg,var(--amber),color-mix(in srgb,var(--amber) 55%,var(--teal)));border:none;
+    box-shadow:0 0 12px color-mix(in srgb,var(--amber) 50%,transparent)}
   .fav-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px 7px 8px;border-radius:999px;
     background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);
     cursor:pointer;transition:transform .15s,box-shadow .15s;backdrop-filter:blur(10px)}
@@ -542,7 +548,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.2</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.3</footer>
 </div>
 
 <script>
@@ -1138,7 +1144,8 @@ function playerCard(entry){
   if(ev?.star)badges.push('<span class="badge star">⭐ 主力</span>');
   else if(ev?.pot)badges.push('<span class="badge pot">🌱 潛力</span>');
   const sw=ev?swChips(ev):'';
-  return `<div class="player">
+  return `<div class="player" style="position:relative">
+    <button class="fav-star ${favHasP(p.id)?'on':''}" data-fav="${p.id}" data-nm="${esc(p.fullName)}" title="收藏球員">${favHasP(p.id)?'★':'☆'}</button>
     ${avatarImg(p.id,p.fullName,'avatar')}
     <div class="p-body">
     <div class="p-top"><span class="pnm" data-pid="${p.id}">${esc(p.fullName||'?')}</span>
@@ -1186,6 +1193,11 @@ async function showTeam(teamId,teamName,fromPop){
     }
     $('roster').innerHTML=html;
     bindPlayerClicks($('roster'));
+    $('roster').querySelectorAll('.fav-star').forEach(b=>b.addEventListener('click',e=>{
+      e.stopPropagation();
+      const on=favToggleP(+b.dataset.fav,b.dataset.nm);
+      b.classList.toggle('on',on);b.textContent=on?'★':'☆';
+    }));
   }catch(e){$('roster').innerHTML=`<div class="empty">名單載入失敗:${esc(e.message)}</div>`;}
 }
 function bindTeamClicks(){
