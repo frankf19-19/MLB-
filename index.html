@@ -457,6 +457,7 @@
       <button class="today-btn" id="todayBtn">今天</button>
       <button class="today-btn" id="calibBtn">模型體檢</button>
       <button class="today-btn" id="standBtn">戰績榜</button>
+      <button class="today-btn" id="honorBtn">榮譽殿堂</button>
       <button class="btn" id="loadBtn"><span class="ico">⟳</span><span>載入</span></button>
     </div>
     <div id="themeBar"></div>
@@ -540,6 +541,19 @@
     </section>
   </div>
 
+  <div id="honorView" class="hidden">
+    <section>
+      <div class="sec-head"><h2>榮譽殿堂</h2><span class="tag" id="honorTag"></span>
+        <button class="back" id="hnBackBtn">← 回比賽</button></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+        <button class="today-btn" id="hnPrev">◀</button>
+        <span id="hnYear" style="font-family:'Space Grotesk',var(--mono);font-size:22px;font-weight:700;min-width:70px;text-align:center"></span>
+        <button class="today-btn" id="hnNext">▶</button>
+      </div>
+      <div id="honorBody"><div class="empty">載入中…</div></div>
+    </section>
+  </div>
+
   <div id="gameView" class="hidden">
     <section>
       <div class="sec-head"><h2>Gameday</h2><span class="tag" id="gdTag"></span>
@@ -548,7 +562,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.3</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分,σ 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v9.4</footer>
 </div>
 
 <script>
@@ -1767,6 +1781,7 @@ function showView(v){
   $('playerView').classList.toggle('hidden',v!=='player');
   $('gameView').classList.toggle('hidden',v!=='game');
   $('standView').classList.toggle('hidden',v!=='stand');
+  $('honorView').classList.toggle('hidden',v!=='honor');
   if(v!=='game')stopGameTimer();
 }
 $('backBtn').addEventListener('click',()=>history.back());
@@ -2293,6 +2308,108 @@ const savedTeam=localStorage.getItem('mlb_teamtheme');
 if(savedTeam&&TEAM_ID[+savedTeam])applyTeamTheme(+savedTeam);
 else applyTheme(fxTheme);
 
+/* ---------- 榮譽殿堂:歷年冠軍與大獎 ---------- */
+let hnYearCur=null,awardIdsCache=null;
+async function ensureAwardIds(){
+  if(awardIdsCache)return awardIdsCache;
+  try{
+    const d=await jget(`${API}/awards`);
+    const list=d.awards||[];
+    const find=(re,exclude)=>list.filter(a=>re.test(a.name||'')&&(!exclude||!exclude.test(a.name||'')));
+    const pick=(arr,league)=>arr.find(a=>new RegExp('^'+league,'i').test(a.id||'')||new RegExp(league==='AL'?'American':'National','i').test(a.name||''))?.id;
+    const mvp=find(/Most Valuable Player/i,/World Series|Championship|All-Star/i);
+    const cy=find(/Cy Young/i);
+    const roy=find(/Rookie of the Year/i);
+    const wsmvp=find(/World Series Most Valuable Player/i);
+    awardIdsCache={
+      ALMVP:pick(mvp,'AL'),NLMVP:pick(mvp,'NL'),
+      ALCY:pick(cy,'AL'),NLCY:pick(cy,'NL'),
+      ALROY:pick(roy,'AL'),NLROY:pick(roy,'NL'),
+      WSMVP:wsmvp[0]?.id
+    };
+  }catch(e){awardIdsCache={};}
+  return awardIdsCache;
+}
+const HN_ZH={ALMVP:'美聯 MVP',NLMVP:'國聯 MVP',ALCY:'美聯賽揚獎',NLCY:'國聯賽揚獎',
+  ALROY:'美聯新人王',NLROY:'國聯新人王',WSMVP:'世界大賽 MVP'};
+async function fetchChampion(year){
+  try{
+    const d=await jget(`${API}/schedule?sportId=1&season=${year}&gameType=W&fields=dates,games,teams,away,home,team,id,name,isWinner,status,abstractGameState`);
+    const wins={},names={};
+    (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(g=>{
+      if(g.status?.abstractGameState!=='Final')return;
+      ['away','home'].forEach(s=>{
+        const t=g.teams?.[s];if(!t?.team?.id)return;
+        names[t.team.id]=t.team.name;
+        if(t.isWinner)wins[t.team.id]=(wins[t.team.id]||0)+1;
+      });
+    }));
+    const ids=Object.keys(wins).map(Number);
+    if(!ids.length)return null;
+    ids.sort((a,b)=>(wins[b]||0)-(wins[a]||0));
+    const champ=ids[0],loser=ids[1];
+    return {id:champ,name:names[champ],w:wins[champ]||0,l:wins[loser]||0,
+      vs:loser?names[loser]:null,vsId:loser};
+  }catch(e){return null;}
+}
+async function fetchAward(aid,year){
+  if(!aid)return null;
+  try{
+    const d=await jget(`${API}/awards/${aid}/recipients?season=${year}&sportId=1`);
+    const r=(d.awards||[])[0];
+    if(!r)return null;
+    return {pid:r.player?.id,name:r.player?.nameFirstLast||r.player?.fullName||r.player?.lastFirstName||'',
+      team:r.team?.name||''};
+  }catch(e){return null;}
+}
+async function loadHonors(year){
+  hnYearCur=year;$('hnYear').textContent=year;
+  $('honorBody').innerHTML='<div class="empty">載入 '+year+' 年榮譽紀錄…</div>';
+  const ids=await ensureAwardIds();
+  const keys=['ALMVP','NLMVP','ALCY','NLCY','ALROY','NLROY','WSMVP'];
+  const [champ,...aws]=await Promise.all([fetchChampion(year),...keys.map(k=>fetchAward(ids[k],year))]);
+  let html='';
+  if(champ){
+    html+=`<div class="analysis" style="border-left-color:var(--amber);display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      ${teamLogo(champ.id,64)}
+      <div>
+        <div style="font-family:'Space Grotesk',var(--cond);font-size:13px;letter-spacing:.12em;color:var(--amber);text-transform:uppercase;font-weight:700">🏆 ${year} 世界大賽冠軍</div>
+        <div style="font-size:22px;font-weight:800;margin-top:2px"><span class="pnm" data-team="${champ.id}" style="cursor:pointer">${esc(champ.name||'')}</span></div>
+        ${champ.vs?`<div class="meta" style="margin-top:3px">系列賽 ${champ.w}–${champ.l} 擊敗 ${esc(champ.vs)}</div>`:''}
+      </div></div>`;
+  }else{
+    html+=`<div class="empty" style="margin-bottom:16px">${year} 年世界大賽:查無結果(可能尚未舉行)。</div>`;
+  }
+  const cards=keys.map((k,i)=>{
+    const a=aws[i];if(!a||!a.name)return '';
+    return `<div class="player" style="display:flex;gap:14px;align-items:center">
+      ${a.pid?`<img class="avatar" src="${headshot(a.pid,120)}" alt="" loading="lazy" style="width:56px;height:56px">`:''}
+      <div>
+        <div class="tag" style="color:var(--teal);font-weight:700">${HN_ZH[k]}</div>
+        <div style="font-size:16.5px;font-weight:700;margin-top:2px">${a.pid?`<span class="pnm" data-pid="${a.pid}" style="cursor:pointer">${esc(a.name)}</span>`:esc(a.name)}</div>
+        ${a.team?`<div class="meta">${esc(a.team)}</div>`:''}
+      </div></div>`;
+  }).filter(Boolean).join('');
+  html+=cards?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">${cards}</div>`
+    :'<div class="empty">該年度獎項資料查無(較早年份或尚未頒發)。</div>';
+  $('honorBody').innerHTML=html;
+  $('honorTag').textContent='資料來源:MLB 官方';
+  bindPlayerClicks($('honorBody'));
+  $('honorBody').querySelectorAll('.pnm[data-team]').forEach(el=>{
+    el.addEventListener('click',()=>showTeam(+el.dataset.team,el.textContent));});
+}
+function showHonors(fromPop){
+  if(!fromPop)history.pushState({v:'honor'},'');
+  showView('honor');
+  const now=+etToday().slice(0,4);
+  const def=hnYearCur||((+etToday().slice(5,7))>=11?now:now-1);
+  loadHonors(def);
+}
+$('honorBtn').addEventListener('click',()=>showHonors());
+$('hnBackBtn').addEventListener('click',()=>history.back());
+$('hnPrev').addEventListener('click',()=>loadHonors(hnYearCur-1));
+$('hnNext').addEventListener('click',()=>{const now=+etToday().slice(0,4);if(hnYearCur<now)loadHonors(hnYearCur+1);});
+
 /* ---------- 我的最愛 ---------- */
 function favGet(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}}
 function favSet(k,v){localStorage.setItem(k,JSON.stringify(v));}
@@ -2348,6 +2465,7 @@ addEventListener('popstate',e=>{
   else if(s.v==='player')showPlayer(s.id,true);
   else if(s.v==='game')showGame(s.id,true);
   else if(s.v==='stand')showStandings(true);
+  else if(s.v==='honor')showHonors(true);
   else showView('home');
 });
 history.replaceState({v:'home'},'');
