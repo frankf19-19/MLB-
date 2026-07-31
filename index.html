@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發評估(ERA 與 FIP 加權、含近30天,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、球隊與先發投手主客場拆分、牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.11 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發評估(ERA 與 FIP 加權、含近30天,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、球隊與先發投手主客場拆分、牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.12 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2804,10 +2804,13 @@ async function updateFavToday(games,date,force){
           el.textContent=`${pre} ${seg.join('·')}`;
           el.style.color=(pi.runs??0)<=2?'var(--teal)':'var(--ink2)';
         }else if(b&&((b.plateAppearances||0)>0||(b.atBats||0)>0)){
-          const seg=[`${b.hits??0}-${b.atBats??0}`];
-          if(b.homeRuns)seg.push(`${b.homeRuns}轟`);
-          if(b.doubles)seg.push(`${b.doubles}二安`);
-          if(b.triples)seg.push(`${b.triples}三壘安`);
+          const sng=(b.hits||0)-(b.doubles||0)-(b.triples||0)-(b.homeRuns||0);
+          const hitParts=[];
+          if(sng>0)hitParts.push(`${sng}一安`);
+          if(b.doubles)hitParts.push(`${b.doubles}二安`);
+          if(b.triples)hitParts.push(`${b.triples}三安`);
+          if(b.homeRuns)hitParts.push(`${b.homeRuns}轟`);
+          const seg=[`${b.hits??0}-${b.atBats??0}${hitParts.length?`(${hitParts.join('·')})`:''}`];
           if(b.rbi)seg.push(`${b.rbi}打點`);
           if(b.runs)seg.push(`${b.runs}得分`);
           if(b.baseOnBalls)seg.push(`${b.baseOnBalls}保送`);
