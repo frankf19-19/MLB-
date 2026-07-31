@@ -524,7 +524,7 @@
           <button class="today-btn" id="calibRun" style="color:var(--teal);border-color:rgba(78,202,193,.5)">開始體檢</button>
           <span class="tag" id="calibProg"></span>
         </div>
-        <div id="calibOut" style="font-size:14px">✅ 校準是全自動的:每天第一次開站會背景回測近 14 天,自動修正 K(分差刻度)與 σ(信心刻度)並立即套用,結果記在下方履歷。這裡的「開始體檢」是看完整報告用的:信心分桶、分差段位、紀錄簿統計,以及手動微調。跑 14 天約需 10~20 秒。</div>
+        <div id="calibOut" style="font-size:14px">✅ 校準是全自動的:每天第一次開站會背景回測近 30 天(約 30~60 秒,不影響瀏覽),自動修正 K(分差刻度)與 σ(信心刻度)並立即套用,結果記在下方履歷。這裡的「開始體檢」是看完整報告用的:信心分桶、分差段位、紀錄簿統計,以及手動微調。</div>
         <div id="calibHist"></div>
       </div>
     </section>
@@ -591,7 +591,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、主客場拆分與牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.1 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、主客場拆分與牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.2 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1931,7 +1931,7 @@ function renderCalibHist(){
     html+=`<div class="pos-group" style="margin-top:14px">校準履歷</div>
       <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;margin-bottom:8px"><canvas id="calibChart" height="150"></canvas></div>
       <div class="table-wrap"><table class="stat" style="min-width:400px">
-      <tr><th>日期</th><th>σ</th><th>K</th><th>近14天命中</th><th>樣本</th></tr>
+      <tr><th>日期</th><th>σ</th><th>K</th><th>近30天命中</th><th>樣本</th></tr>
       ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.n}</td></tr>`).join('')}
       </table></div>`;
   }
@@ -2013,7 +2013,7 @@ async function autoCalibrate(){
   calibRunning=true;
   const st=$('status');
   try{
-    const {samples}=await collectSamples(14,(i,n)=>{
+    const {samples}=await collectSamples(30,(i,n)=>{
       st.textContent=`🔧 每日自動校準中 ${i}/${n} 天…(不影響瀏覽)`;});
     localStorage.setItem('mlb_calib_last',etToday());
     if(samples.length>=30){
@@ -2028,7 +2028,7 @@ async function autoCalibrate(){
         m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0})));
       pushCalibHist({d:etToday(),s:+RUN_SIGMA.toFixed(2),k:+MARGIN_K.toFixed(2),
         hit:+(hit*100).toFixed(1),n:samples.length});
-      st.textContent=`✅ 今日自動校準:K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近14天命中 ${(hit*100).toFixed(1)}% · 紀錄簿 ${total} 場`;
+      st.textContent=`✅ 今日自動校準(30天):K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近30天命中 ${(hit*100).toFixed(1)}% · 紀錄簿 ${total} 場`;
       if(kChanged||sChanged)loadDay(true);
     }else{
       st.textContent='今日自動校準:樣本不足,略過(球季初屬正常)';
