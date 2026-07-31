@@ -591,7 +591,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、主客場拆分與牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.2 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發 ERA(含近30天加權,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、球隊與先發投手主客場拆分、牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.6 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -638,6 +638,7 @@ async function fetchGames(date,lite){
            hR:ls.teams?.home?.runs,hH:ls.teams?.home?.hits,hE:ls.teams?.home?.errors},
       on1:!!ls.offense?.first,on2:!!ls.offense?.second,on3:!!ls.offense?.third,
       batter:ls.offense?.batter,pitcher:ls.defense?.pitcher,
+      inns:(ls.innings||[]).map(i=>({a:i.away?.runs??0,h:i.home?.runs??0})),
       scoring:(g.scoringPlays||[]).map(sp=>({inn:sp.about?.inning,half:sp.about?.halfInning,
         desc:sp.result?.description})).filter(x=>x.desc)});
   }));
@@ -659,6 +660,19 @@ async function fetchPitcherStats(ids,season,endDate){
   }catch(e){}
   try{
     parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${shiftDate(endDate,-29)},endDate=${endDate},season=${season})`),'recent');
+  }catch(e){}
+  try{
+    const d=await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[statSplits],sitCodes=[h,a],season=${season})`);
+    (d.people||[]).forEach(p=>{
+      const sp=(p.stats||[]).find(s=>s.group?.displayName==='pitching')?.splits||[];
+      sp.forEach(s=>{
+        const code=(s.split?.code||'').toLowerCase();
+        const era=parseFloat(s.stat?.era), ip=parseFloat(s.stat?.inningsPitched);
+        if(!isFinite(era)||!isFinite(ip))return;
+        out[p.id]=out[p.id]||{};
+        if(code==='h')out[p.id].vH={era,ip};else if(code==='a')out[p.id].vA={era,ip};
+      });
+    });
   }catch(e){}
   const missing=ids.filter(i=>!out[i]||!out[i].season);
   if(missing.length){
@@ -817,7 +831,16 @@ function predict(g,pm,lg,ps,ex){
     let d=(st.era-lgERA)/9*5.8*w*0.5;
     return Math.max(-0.8,Math.min(0.8,d));
   };
-  const dHome=stAdj(hSt), dAway=stAdj(aSt);
+  // ⑨ 先發主客場拆分:主隊先發用主場 ERA、客隊先發用客場 ERA,樣本收縮混 25%
+  const venueEra=(st,side)=>{
+    if(!st)return st;
+    const v=side==='h'?st.vH:st.vA;
+    if(!v||!(v.ip>=25))return st;
+    const w=0.25*v.ip/(v.ip+40);
+    return Object.assign({},st,{era:(1-w)*st.era+w*v.era,venAdj:+((v.era-st.era)*w).toFixed(2)});
+  };
+  const hStV=venueEra(hSt,'h'), aStV=venueEra(aSt,'a');
+  const dHome=stAdj(hStV), dAway=stAdj(aStV);
   if(dHome!=null)expAway+=dHome;
   if(dAway!=null)expHome+=dAway;
   const recNote=st=>{
@@ -882,6 +905,10 @@ function predict(g,pm,lg,ps,ex){
     why+=`打線 OPS 主 ${exH.ops.toFixed(3)}、客 ${exA.ops.toFixed(3)}(聯盟 ${lgOPS.toFixed(3)})。`;
   }
   why+=pitTxt+bpTxt;
+  const venNotes=[];
+  if(hStV&&Math.abs(hStV.venAdj||0)>=0.15)venNotes.push(`主隊先發${hStV.venAdj<0?'主場更穩':'主場偏弱'}`);
+  if(aStV&&Math.abs(aStV.venAdj||0)>=0.15)venNotes.push(`客隊先發${aStV.venAdj<0?'客場不怯':'客場走樣'}`);
+  if(venNotes.length)why+=`先發主客場拆分:${venNotes.join('、')}(已微調)。`;
   if(hPl.used||aPl.used){
     const seg=[];
     if(hPl.used)seg.push(`主隊打線對${aSt?.hand==='L'?'左':'右'}投${hPl.ratio>1?'較強':'偏弱'}(×${hPl.ratio.toFixed(2)})`);
@@ -898,6 +925,31 @@ function predict(g,pm,lg,ps,ex){
     margin:Math.abs(margin),raw_margin:margin,raw_margin_pre:marginPre,why,
     pitAdjusted:(dHome!=null||dAway!=null),bpAdjusted:(bpH!=null&&bpA!=null)};
 }
+/* 未中歸因診斷:解剖每場沒中的比賽 */
+const MISS_ZH={coin:'五五波輸面',late:'終盤遭逆轉',shell:'看好方投手被打爆',cold:'看好方打線熄火',edge:'機率內小輸'};
+const MISS_NOTE={
+  coin:'模型信心本就低於 58%,接近擲硬幣,屬不可修正的本質變異。',
+  late:'前六局仍領先、第七局後被翻盤——牛棚與終盤守成的高槓桿隨機性;若特定球隊反覆出現,是牛棚層加權的訊號。',
+  shell:'看好方失分遠超預期(+3 分以上)——先發或投手群當日崩盤;反覆出現代表先發近況權重可再加重。',
+  cold:'看好方得分比預期少 2.5 分以上——打線集體熄火,多為對方先發壓制或手感低潮。',
+  edge:'比分落在預期分布內的小輸,機率內結果,無需修正。'};
+function classifyMiss(g,p){
+  const favHome=(p.raw_margin||0)>=0;
+  const conf=Math.max(p.home_prob||.5,1-(p.home_prob||.5));
+  const aR=g.homeScore!=null?(g.awayScore??0):0, hR=g.homeScore??0;
+  const favR=favHome?hR:(g.awayScore??0), dogR=favHome?(g.awayScore??0):hR;
+  const favExp=favHome?(p.exp_home??0):(p.exp_away??0);
+  const dogExp=favHome?(p.exp_away??0):(p.exp_home??0);
+  if(conf<0.58)return 'coin';
+  if(g.inns&&g.inns.length>=6){
+    let a6=0,h6=0;for(let i=0;i<6;i++){a6+=g.inns[i]?.a||0;h6+=g.inns[i]?.h||0;}
+    const favLead=favHome?(h6-a6):(a6-h6);
+    if(favLead>0)return 'late';
+  }
+  if(dogR>=dogExp+3)return 'shell';
+  if(favR<=favExp-2.5)return 'cold';
+  return 'edge';
+}
 function review(g,p){
   const actual=g.homeWin?g.home:(g.awayWin?g.away:null); if(!actual)return null;
   const hit=actual===p.predicted_winner;
@@ -913,9 +965,11 @@ function review(g,p){
       else t+=`但實際只贏 ${Math.abs(actMargin)} 分,比預期的 ${r1(p.margin)} 分驚險。`;
     }
   }else{
-    t=`未命中:預測 ${p.predicted_winner}(勝率 ${favProb}%),實際由 ${actual} 以 ${g.awayScore}:${g.homeScore} 拿下。`;
-    t+= favProb>=65? `這算爆冷——模型把握較高仍翻船${p.pitAdjusted?'(先發、打線與牛棚均已計入,可能是當日手感、關鍵失誤或傷兵等因素)':',值得查先發投手或傷兵等模型沒看到的因素'}。`
-      : `原本就接近五五波(把握僅 ${favProb}%),輸掉屬正常波動。`;
+    const cat=classifyMiss(g,p);
+    t=`未命中【${MISS_ZH[cat]}】:預測 ${p.predicted_winner}(勝率 ${favProb}%),實際由 ${actual} 以 ${g.awayScore}:${g.homeScore} 拿下。`;
+    t+=MISS_NOTE[cat];
+    if(favProb>=68&&cat!=='coin')t+=`此為高信心爆冷,已自動納入歸因統計供修正參考。`;
+    return {hit,actual,actMargin,text:t,favProb,cat};
   }
   return {hit,actual,actMargin,text:t,favProb};
 }
@@ -1562,7 +1616,10 @@ function boxTable(side,box){
     const pos=(pl.allPositions&&pl.allPositions.length)
       ? pl.allPositions.map(p=>p.abbreviation).join('-')
       : (pl.position?.abbreviation||'');
-    const nm=`<span class="pnm" data-pid="${pl.person.id}" style="cursor:pointer;${isSub?'color:var(--muted)':''}">${isSub?'↳ ':''}${esc(pl.person.fullName)}</span>`;
+    const hot=((b.hits||0)>=3)||((b.homeRuns||0)>=1&&(b.hits||0)>=2)||((b.rbi||0)>=3);
+    const cold=((b.atBats||0)>=3&&(b.hits||0)===0&&(b.strikeOuts||0)>=2);
+    const mark=hot?'🔥 ':(cold?'❄️ ':'');
+    const nm=`<span class="pnm" data-pid="${pl.person.id}" style="cursor:pointer;${isSub?'color:var(--muted)':''}">${isSub?'↳ ':''}${mark}${esc(pl.person.fullName)}</span>`;
     return `<tr${isSub?' style="opacity:.85"':''}><td>${nm}</td>
       <td>${esc(pos)}</td>
       <td>${b.atBats??0}</td><td>${b.runs??0}</td><td>${b.hits??0}</td><td>${b.rbi??0}</td>
@@ -1571,6 +1628,19 @@ function boxTable(side,box){
   return `<div class="pos-group">${esc(t.team?.name||side)} 打擊(含替補與被換下)</div><div class="table-wrap"><table class="stat">
     <tr><th>打者</th><th>位</th><th>AB</th><th>R</th><th>H</th><th>RBI</th><th>BB</th><th>K</th><th>AVG</th><th>OPS</th></tr>
     ${rows}</table></div>`;
+}
+/* 打者 vs 投手 生涯對戰(BvP) */
+const bvpCache={};
+async function fetchBvP(batId,pitId){
+  const key=batId+'-'+pitId;
+  if(bvpCache[key]!==undefined)return bvpCache[key];
+  try{
+    const d=await jget(`${API}/people/${batId}/stats?stats=vsPlayerTotal&group=hitting&opposingPlayerId=${pitId}`);
+    const sp=(d.stats||[]).flatMap(s=>s.splits||[]);
+    const st=sp.length?sp[sp.length-1].stat:null;
+    const r=st&&st.atBats>0?{ab:st.atBats,h:st.hits||0,hr:st.homeRuns||0,avg:st.avg||'',bb:st.baseOnBalls||0,so:st.strikeOuts||0}:null;
+    bvpCache[key]=r;return r;
+  }catch(e){bvpCache[key]=null;return null;}
 }
 async function loadGame(gid){
   if(gid!==curGameId)return;
@@ -1606,7 +1676,7 @@ async function loadGame(gid){
     const pitLine=pitcherBox?`${pitcherBox.numberOfPitches??pitcherBox.pitchesThrown??'?'} 球 · ${pitcherBox.inningsPitched??'?'} IP · ${pitcherBox.strikeOuts??0} K · ${pitcherBox.earnedRuns??0} ER`:'';
     const duel=(st==='Live'&&(pit||bat))?`<div class="live-row" style="border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-top:14px">
       ${pit?`<div class="duel">${avatarImg(pit.id,pit.fullName,'sr-ava')}<div><div class="role">投球</div><div class="dnm" data-pid="${pit.id}">${esc(pit.fullName)}</div>${pitLine?`<div class="pi-inn">${pitLine}</div>`:''}</div></div>`:''}
-      ${bat?`<div class="duel">${avatarImg(bat.id,bat.fullName,'sr-ava')}<div><div class="role">打擊</div><div class="dnm" data-pid="${bat.id}">${esc(bat.fullName)}</div></div></div>`:''}
+      ${bat?`<div class="duel">${avatarImg(bat.id,bat.fullName,'sr-ava')}<div><div class="role">打擊</div><div class="dnm" data-pid="${bat.id}">${esc(bat.fullName)}</div><div class="pi-inn" id="bvpLine"></div></div></div>`:''}
       <div class="basestate">${diamondSvg(!!ls.offense?.first,!!ls.offense?.second,!!ls.offense?.third)}
         <span class="outs">B <b>${cnt.balls??ls.balls??0}</b> · S <b>${cnt.strikes??ls.strikes??0}</b> · <b>${cnt.outs??ls.outs??0}</b> 出局</span></div>
     </div>`:'';
@@ -1645,6 +1715,14 @@ async function loadGame(gid){
       ${playFeedHtml(ld.plays?.allPlays)}
       ${boxes}`;
     bindPlayerClicks($('gameDetail'));
+    // 生涯對戰:非同步補上,不擋渲染
+    if(st==='Live'&&bat&&pit){
+      fetchBvP(bat.id,pit.id).then(b=>{
+        const el=document.getElementById('bvpLine');if(!el)return;
+        el.textContent=b?`生涯對戰 ${b.ab} 打數 ${b.h} 安${b.hr?` ${b.hr} 轟`:''}(${b.avg})${b.so>=3?` · ${b.so} 次三振`:''}`:'生涯首次對決';
+        el.style.color=b&&parseFloat(b.avg)>=.320?'var(--teal)':(b&&b.ab>=8&&parseFloat(b.avg)<=.150?'var(--miss)':'var(--muted)');
+      });
+    }
     $('gameDetail').querySelectorAll('.gnm[data-team]').forEach(el=>{
       el.addEventListener('click',()=>showTeam(+el.dataset.team,el.textContent));});
     stopGameTimer();
@@ -1714,6 +1792,63 @@ async function fetchArsenal(pid,season){
     return rows;
   }catch(e){return [];}
 }
+/* 各球場表現:由逐場紀錄推算(主場=自家、客場=對手主場) */
+const ipOuts=s=>{const p=String(s||'0').split('.');return (parseInt(p[0])||0)*3+(parseInt(p[1])||0);};
+async function fetchParkSplits(pid,grp,season){
+  const seasons=[season,season-1,season-2];
+  const parks={};
+  await Promise.all(seasons.map(async y=>{
+    try{
+      const d=await jget(`${API}/people/${pid}/stats?stats=gameLog&group=${grp}&season=${y}`);
+      ((d.stats||[])[0]?.splits||[]).forEach(s=>{
+        const vid=s.isHome?s.team?.id:s.opponent?.id;
+        if(!vid||!TEAM_ID[vid])return;
+        const st=s.stat||{};
+        const P=parks[vid]=parks[vid]||{g:0,ab:0,h:0,hr:0,bb:0,hbp:0,sf:0,tb:0,pa:0,outs:0,er:0,so:0};
+        P.g++;
+        if(grp==='hitting'){
+          P.ab+=st.atBats||0;P.h+=st.hits||0;P.hr+=st.homeRuns||0;
+          P.bb+=st.baseOnBalls||0;P.hbp+=st.hitByPitch||0;P.sf+=st.sacFlies||0;
+          P.tb+=st.totalBases||0;P.pa+=st.plateAppearances||0;
+        }else{
+          P.outs+=ipOuts(st.inningsPitched);P.er+=st.earnedRuns||0;P.so+=st.strikeOuts||0;
+        }
+      });
+    }catch(e){}
+  }));
+  return parks;
+}
+function parkTableHtml(parks,isP){
+  const ids=Object.keys(parks).map(Number)
+    .filter(id=>isP?parks[id].outs>=15:parks[id].ab>=10)
+    .sort((a,b)=>isP?(parks[b].outs-parks[a].outs):(parks[b].pa-parks[a].pa))
+    .slice(0,12);
+  if(ids.length<2)return '';
+  const rows=ids.map(id=>{
+    const P=parks[id];
+    if(isP){
+      const ip=(P.outs/3);
+      const era=P.outs?(9*P.er/ip).toFixed(2):'-';
+      return `<tr><td style="display:flex;align-items:center;gap:7px">${teamLogo(id,20)}${TEAM_ID[id].ab} 主場</td>
+        <td>${P.g}</td><td>${ip.toFixed(1)}</td><td>${era}</td><td>${P.so}</td></tr>`;
+    }
+    const avg=P.ab?(P.h/P.ab).toFixed(3).replace(/^0/,''):'-';
+    const obp=(P.ab+P.bb+P.hbp+P.sf)?((P.h+P.bb+P.hbp)/(P.ab+P.bb+P.hbp+P.sf)):0;
+    const slg=P.ab?(P.tb/P.ab):0;
+    const ops=(obp+slg).toFixed(3).replace(/^0/,'');
+    const hot=P.ab>=20&&(obp+slg)>=.900, cold2=P.ab>=20&&(obp+slg)<=.600;
+    return `<tr><td style="display:flex;align-items:center;gap:7px">${teamLogo(id,20)}${TEAM_ID[id].ab} 主場</td>
+      <td>${P.g}</td><td>${P.ab}</td>
+      <td style="${hot?'color:var(--teal);font-weight:700':cold2?'color:var(--miss)':''}">${avg}</td>
+      <td style="${hot?'color:var(--teal);font-weight:700':cold2?'color:var(--miss)':''}">${ops}</td>
+      <td>${P.hr}</td></tr>`;
+  }).join('');
+  const head=isP?'<tr><th>球場</th><th>場</th><th>IP</th><th>ERA</th><th>K</th></tr>'
+              :'<tr><th>球場</th><th>場</th><th>AB</th><th>AVG</th><th>OPS</th><th>HR</th></tr>';
+  return `<div class="pos-group" style="margin-top:14px">各球場表現(近三季合計,依樣本排序)</div>
+    <div class="table-wrap"><table class="stat" style="min-width:420px">${head}${rows}</table></div>
+    <div class="tag" style="margin-top:6px">${isP?'青/紅標示僅供參考;':'青色=該場地火燙(OPS≥.900)、紅色=低迷(≤.600),20 打數以上才標示;'}樣本小的球場數據波動大,判讀請看場次與打數。</div>`;
+}
 async function fetchZoneData(pid,season){
   // 從投手本季比賽記錄抓進壘點(pX,pZ)。用 game logs 找最近幾場,再抓 playByPlay。
   try{
@@ -1759,9 +1894,23 @@ async function showPlayer(pid,fromPop){
     const d=await jget(`${API}/people?personIds=${pid}&hydrate=currentTeam,stats(group=[hitting,pitching],type=[yearByYear,career])`);
     const p=(d.people||[])[0]; if(!p)throw new Error('查無資料');
     const isPq=p.primaryPosition?.type==='Pitcher';
-    const [arsenal,zonePts]=await Promise.all([
+    const [arsenal,zonePts,parkSplits,haSplits]=await Promise.all([
       isPq?fetchArsenal(pid,season):Promise.resolve([]),
-      isPq?fetchZoneData(pid,season):Promise.resolve([])]);
+      isPq?fetchZoneData(pid,season):Promise.resolve([]),
+      fetchParkSplits(pid,isPq?'pitching':'hitting',season).catch(()=>({})),
+      (async()=>{
+        try{
+          const grp=isPq?'pitching':'hitting';
+          const d2=await jget(`${API}/people/${pid}/stats?stats=statSplits&sitCodes=h,a&group=${grp}&season=${season}`);
+          const sp=(d2.stats||[]).flatMap(s=>s.splits||[]);
+          const out={};
+          sp.forEach(s=>{
+            const code=(s.split?.code||'').toLowerCase();
+            if(code==='h')out.h=s.stat;else if(code==='a')out.a=s.stat;
+          });
+          return (out.h||out.a)?out:null;
+        }catch(e){return null;}
+      })()]);
     const pos=p.primaryPosition?.abbreviation||'?';
     const cm=ftToCm(p.height), kg=p.weight?Math.round(p.weight*0.4536):null;
     const birthplace=[p.birthCity,p.birthStateProvince,p.birthCountry].filter(Boolean).join(', ');
@@ -1809,6 +1958,21 @@ async function showPlayer(pid,fromPop){
       </div>
       ${sw}
       ${seasonEval&&!isP?'<div class="pos-group" style="margin-top:14px">能力雷達</div><div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;max-width:420px"><canvas id="radarChart" height="240"></canvas></div>':''}
+      ${(()=>{
+        if(!haSplits)return '';
+        const row=(lab,st)=>{
+          if(!st)return '';
+          return isP
+            ?`<tr><td>${lab}</td><td>${esc(st.era||'-')}</td><td>${esc(st.whip||'-')}</td><td>${esc(st.inningsPitched||'-')}</td><td>${st.strikeOuts??'-'}</td></tr>`
+            :`<tr><td>${lab}</td><td>${esc(st.avg||'-')}</td><td>${esc(st.ops||'-')}</td><td>${st.homeRuns??'-'}</td><td>${st.rbi??'-'}</td></tr>`;
+        };
+        const head=isP?'<tr><th></th><th>ERA</th><th>WHIP</th><th>IP</th><th>K</th></tr>'
+                     :'<tr><th></th><th>AVG</th><th>OPS</th><th>HR</th><th>RBI</th></tr>';
+        return `<div class="pos-group" style="margin-top:14px">主客場拆分(本季)</div>
+          <div class="table-wrap"><table class="stat" style="min-width:360px;max-width:480px">${head}
+          ${row('🏠 主場',haSplits.h)}${row('✈️ 客場',haSplits.a)}</table></div>`;
+      })()}
+      ${parkSplits?parkTableHtml(parkSplits,isP):''}
       ${arsenalHtml(arsenal)}
       ${zoneCanvas}
       ${tables||'<div class="empty" style="margin-top:12px">查無生涯數據。</div>'}`;
@@ -1978,8 +2142,10 @@ async function collectSamples(days,prog){
         const p=predict(g,pm,lg,ps,ex);
         const mPre=p.raw_margin_pre??p.raw_margin;
         if(mPre==null){skipped++;return;}
+        const hitS=((mPre>=0)===homeWon);
         samples.push({id:g.id,d:date,aw:g.away,hm:g.home,
-          m:mPre,homeWon,actM:(g.homeScore??0)-(g.awayScore??0)});
+          m:mPre,homeWon,actM:(g.homeScore??0)-(g.awayScore??0),
+          cat:hitS?null:classifyMiss(g,p)});
       });
     }catch(e){}
   }
@@ -2025,7 +2191,7 @@ async function autoCalibrate(){
       if(sChanged){RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));}
       const hit=hitRateOf(samples);
       const total=mergeLedger(samples.map(x=>({id:x.id,d:x.d,aw:x.aw,hm:x.hm,
-        m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0})));
+        m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0,cat:x.cat||undefined})));
       pushCalibHist({d:etToday(),s:+RUN_SIGMA.toFixed(2),k:+MARGIN_K.toFixed(2),
         hit:+(hit*100).toFixed(1),n:samples.length});
       st.textContent=`✅ 今日自動校準(30天):K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近30天命中 ${(hit*100).toFixed(1)}% · 紀錄簿 ${total} 場`;
@@ -2088,7 +2254,7 @@ $('calibRun').addEventListener('click',async()=>{
     const hitRate=hitRateOf(samples);
     const mErr=samples.reduce((s,x)=>s+Math.abs(x.actM-x.m*MARGIN_K),0)/samples.length;
     const total=mergeLedger(samples.map(x=>({id:x.id,d:x.d,aw:x.aw,hm:x.hm,
-      m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0})));
+      m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0,cat:x.cat||undefined})));
     const changes=[];
     if(Math.abs(nk-MARGIN_K)>0.005)changes.push(`K:${MARGIN_K.toFixed(2)}→${nk.toFixed(2)}(分差${nk>MARGIN_K?'放大':'收縮'})`);
     if(Math.abs(best-RUN_SIGMA)>0.01)changes.push(`σ:${RUN_SIGMA.toFixed(2)}→${best.toFixed(2)}`);
@@ -2099,7 +2265,30 @@ $('calibRun').addEventListener('click',async()=>{
       <div class="pos-group">勝率信心 vs 實際</div>
       <div class="table-wrap"><table class="stat" style="min-width:420px">
         <tr><th>模型信心</th><th>場數</th><th>平均信心</th><th>實際命中</th><th>偏差</th></tr>${rows}</table></div>
-      <div class="pos-group">分差段位 vs 實際</div>
+      <div class="pos-group">未中歸因(近 ${days} 天,共 ${samples.filter(x=>x.cat).length} 場未中)</div>
+      ${(()=>{
+        const misses=samples.filter(x=>x.cat);
+        if(!misses.length)return '<div class="empty">此期間全數命中(或無未中樣本)。</div>';
+        const order=['coin','edge','late','shell','cold'];
+        const cnt={};misses.forEach(x=>cnt[x.cat]=(cnt[x.cat]||0)+1);
+        const fixable=(cnt.late||0)+(cnt.shell||0)+(cnt.cold||0);
+        const rows2=order.filter(c=>cnt[c]).map(c=>{
+          const n2=cnt[c],pc=(n2/misses.length*100).toFixed(0);
+          const fix=(c==='coin'||c==='edge')?'<span style="color:var(--muted)">本質變異</span>':'<span style="color:var(--amber)">可觀察修正</span>';
+          return `<tr><td>${MISS_ZH[c]}</td><td>${n2}</td><td>${pc}%</td><td>${fix}</td></tr>`;
+        }).join('');
+        let verdict2='';
+        const fr=fixable/misses.length;
+        if(fr<=0.35)verdict2='可修正類佔比低——未中主要來自棒球本質變異,模型結構健康,依賴 K/σ 校準即可。';
+        else{
+          const top=['late','shell','cold'].sort((a,b)=>(cnt[b]||0)-(cnt[a]||0))[0];
+          verdict2=`可修正類佔 ${(fr*100).toFixed(0)}%,最大宗為「${MISS_ZH[top]}」——${top==='late'?'建議下一步強化牛棚層(近期用量)權重':top==='shell'?'建議下一步加重先發近況權重':'打線波動屬低可預測性,先觀察'}。累積更多樣本後告訴我,我來調。`;
+        }
+        return `<div class="table-wrap"><table class="stat" style="min-width:420px">
+          <tr><th>歸因</th><th>場數</th><th>佔比</th><th>性質</th></tr>${rows2}</table></div>
+        <div style="margin-top:8px;font-size:13.5px">${verdict2}</div>`;
+      })()}
+      <div class="pos-group" style="margin-top:14px">分差段位 vs 實際</div>
       <div class="table-wrap"><table class="stat" style="min-width:480px">
         <tr><th>預測分差</th><th>場數</th><th>隱含勝率</th><th>實際勝率</th><th>預測均差</th><th>實際均差</th></tr>${mrows}</table></div>
       <div style="margin-top:10px">${verdict}</div>
