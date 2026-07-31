@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發評估(ERA 與 FIP 加權、含近30天,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、球隊與先發投手主客場拆分、牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.8 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>模型:火力=整季得分50%+近14天25%+OPS25%;失分=整季70%+近14天30%;再依先發評估(ERA 與 FIP 加權、含近30天,上限±0.8)與牛棚 ERA(上限±0.5)修正,含主場+0.2分、球場因子、左右投拆分、球隊與先發投手主客場拆分、牛棚疲勞估算,σ/K 每日自動校準。戰績、近況與先發數據回看時皆取「該日之前」;OPS 與牛棚為本季累計。<br>棒球單場變異極大,命中率長期 5–6 成屬正常。此頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.9 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1198,7 +1198,7 @@ async function loadDay(quiet){
     bindTeamClicks();
     loadTransactions(date);
     loadH2H(games,season);
-    updateFavToday();
+    updateFavToday(games,date);
     const summary=buildDailySummary(date,games,curPreds,reviews,{hits,errSum,errN});
     $('aiText').textContent=summary;
     $('aiSec').classList.toggle('hidden',!summary);
@@ -2731,7 +2731,7 @@ function favHasT(id){return favGet('mlb_fav_t').some(x=>x.id===id);}
 function favToggleP(id,name){
   let L=favGet('mlb_fav_p');
   if(L.some(x=>x.id===id))L=L.filter(x=>x.id!==id);else L.push({id,name});
-  favSet('mlb_fav_p',L.slice(-30));renderFavs();updateFavToday(true);return favHasP(id);
+  favSet('mlb_fav_p',L.slice(-30));renderFavs();updateFavToday(curGames,$('datePick').value||etToday(),true);return favHasP(id);
 }
 function favToggleT(id,name){
   let L=favGet('mlb_fav_t');
@@ -2757,59 +2757,60 @@ function renderFavs(){
 }
 renderFavs();
 
-/* 最愛球員今日戰報 */
-let favTodayLast=0;
-async function updateFavToday(force){
+/* 最愛球員戰報(跟著所選日期) */
+let favTodayLast=0,favLastDate=null;
+const gameBoxCache={};
+async function updateFavToday(games,date,force){
   const P=favGet('mlb_fav_p');
   if(!P.length)return;
   const now=Date.now();
-  if(!force&&now-favTodayLast<60000)return;
-  favTodayLast=now;
+  if(!force&&date===favLastDate&&now-favTodayLast<60000)return;
+  favTodayLast=now;favLastDate=date;
+  const isToday=date===etToday();
+  const lab=isToday?'今日':date.slice(5).replace('-','/');
+  document.querySelectorAll('.fav-chip .fsub').forEach(e=>{e.textContent='…';e.style.color='var(--muted)';});
   try{
-    const today=etToday();
-    const [pd,games]=await Promise.all([
-      jget(`${API}/people?personIds=${P.map(x=>x.id).join(',')}`),
-      fetchGamesCached(today)]);
+    const pd=await jget(`${API}/people?personIds=${P.map(x=>x.id).join(',')}`);
     const info={};(pd.people||[]).forEach(p=>info[p.id]={team:p.currentTeam?.id});
-    const byTeam={};games.forEach(g=>{byTeam[g.awayId]=g;byTeam[g.homeId]=g;});
-    const boxCache2={};
-    const getBox=async pk=>{if(boxCache2[pk])return boxCache2[pk];
-      const b=await jget(`${API}/game/${pk}/boxscore`);boxCache2[pk]=b;return b;};
+    const byTeam={};(games||[]).forEach(g=>{byTeam[g.awayId]=g;byTeam[g.homeId]=g;});
+    const getBox=async pk=>{if(gameBoxCache[pk])return gameBoxCache[pk];
+      const b=await jget(`${API}/game/${pk}/boxscore`);gameBoxCache[pk]=b;return b;};
     for(const f of P){
       const el=document.querySelector(`.fav-chip[data-p="${f.id}"] .fsub`);
       if(!el)continue;
       const inf=info[f.id];
       if(!inf||!inf.team){el.textContent='';continue;}
       const g=byTeam[inf.team];
-      if(!g){el.textContent='今日未出賽(球隊休兵)';el.style.color='var(--muted)';continue;}
+      if(!g){el.textContent=`${lab}未出賽(球隊休兵)`;el.style.color='var(--muted)';continue;}
       if(g.status!=='Live'&&g.status!=='Final'){
         const opp=inf.team===g.homeId?g.away:g.home;
-        el.textContent=`今日 ${g.startTpe||''} vs ${opp}`;el.style.color='var(--muted)';continue;
+        el.textContent=isToday?`今日 ${g.startTpe||''} vs ${opp}`:`${lab} 未開打`;
+        el.style.color='var(--muted)';continue;
       }
       try{
         const box=await getBox(g.id);
         const side=inf.team===g.homeId?'home':'away';
         const pl=box.teams?.[side]?.players?.['ID'+f.id];
         const b=pl?.stats?.batting, pi=pl?.stats?.pitching;
-        const done=g.status==='Final';
+        const live=g.status==='Live';
+        const pre=live?'🔴目前':lab;
         if(pi&&parseFloat(pi.inningsPitched)>0){
-          el.textContent=`${done?'今日':'🔴目前'} 主投 ${pi.inningsPitched} 局 ${pi.strikeOuts??0}K 失${pi.runs??0}`;
+          el.textContent=`${pre} 主投 ${pi.inningsPitched} 局 ${pi.strikeOuts??0}K 失${pi.runs??0}`;
           el.style.color=(pi.runs??0)<=2?'var(--teal)':'var(--ink2)';
         }else if(b&&((b.plateAppearances||0)>0||(b.atBats||0)>0)){
           const seg=[`${b.hits??0}-${b.atBats??0}`];
           if(b.homeRuns)seg.push(`${b.homeRuns}轟`);
           if(b.rbi)seg.push(`${b.rbi}打點`);
           if(b.runs&&!b.homeRuns)seg.push(`${b.runs}得分`);
-          el.textContent=`${done?'今日':'🔴目前'} ${seg.join('·')}`;
+          el.textContent=`${pre} ${seg.join('·')}`;
           el.style.color=((b.hits||0)>=2||b.homeRuns)?'var(--teal)':'var(--ink2)';
         }else{
-          el.textContent=done?'本場未上場':'尚未上場';el.style.color='var(--muted)';
+          el.textContent=live?'尚未上場':`${lab} 未上場`;el.style.color='var(--muted)';
         }
       }catch(e){el.textContent='';}
     }
   }catch(e){}
 }
-updateFavToday(true);
 
 /* ---------- 區塊收合 ---------- */
 function initCollapsibles(ids){
