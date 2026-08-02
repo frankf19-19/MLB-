@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.13 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.14 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2764,7 +2764,7 @@ async function updateFavToday(games,date,force){
   const P=favGet('mlb_fav_p');
   if(!P.length)return;
   const now=Date.now();
-  if(!force&&date===favLastDate&&now-favTodayLast<60000)return;
+  if(!force&&date===favLastDate&&now-favTodayLast<40000)return;
   favTodayLast=now;favLastDate=date;
   const isToday=date===etToday();
   const lab=isToday?'今日':date.slice(5).replace('-','/');
@@ -2773,8 +2773,14 @@ async function updateFavToday(games,date,force){
     const pd=await jget(`${API}/people?personIds=${P.map(x=>x.id).join(',')}&hydrate=currentTeam`);
     const info={};(pd.people||[]).forEach(p=>info[p.id]={team:p.currentTeam?.id});
     const byTeam={};(games||[]).forEach(g=>{byTeam[g.awayId]=g;byTeam[g.homeId]=g;});
-    const getBox=async pk=>{if(gameBoxCache[pk])return gameBoxCache[pk];
-      const b=await jget(`${API}/game/${pk}/boxscore`);gameBoxCache[pk]=b;return b;};
+    const passBox={};
+    const getBox=async(pk,live)=>{
+      if(passBox[pk])return passBox[pk];
+      if(!live&&gameBoxCache[pk]){passBox[pk]=gameBoxCache[pk];return passBox[pk];}
+      const b=await jget(`${API}/game/${pk}/boxscore`);
+      passBox[pk]=b;
+      if(!live)gameBoxCache[pk]=b;
+      return b;};
     for(const f of P){
       const el=document.querySelector(`.fav-chip[data-p="${f.id}"] .fsub`);
       if(!el)continue;
@@ -2788,7 +2794,7 @@ async function updateFavToday(games,date,force){
         el.style.color='var(--muted)';continue;
       }
       try{
-        const box=await getBox(g.id);
+        const box=await getBox(g.id,g.status==='Live');
         const side=inf.team===g.homeId?'home':'away';
         const pl=box.teams?.[side]?.players?.['ID'+f.id];
         const b=pl?.stats?.batting, pi=pl?.stats?.pitching;
