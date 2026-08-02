@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.14 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.15 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2105,8 +2105,8 @@ function renderCalibHist(){
     html+=`<div class="pos-group" style="margin-top:14px">校準履歷</div>
       <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;margin-bottom:8px"><canvas id="calibChart" height="150"></canvas></div>
       <div class="table-wrap"><table class="stat" style="min-width:400px">
-      <tr><th>日期</th><th>σ</th><th>K</th><th>近30天命中</th><th>樣本</th></tr>
-      ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.n}</td></tr>`).join('')}
+      <tr><th>日期</th><th>σ</th><th>K</th><th>近30天命中</th><th>分差誤差</th><th>樣本</th></tr>
+      ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.e!=null?r.e.toFixed(2):'-'}</td><td>${r.n}</td></tr>`).join('')}
       </table></div>`;
   }
   el.innerHTML=html;
@@ -2120,7 +2120,8 @@ function renderCalibHist(){
       data:{labels:hh.map(r=>r.d.slice(5)),datasets:[
         {label:'命中率%',data:hh.map(r=>r.hit),borderColor:amber,backgroundColor:amber,tension:.3,yAxisID:'y'},
         {label:'σ',data:hh.map(r=>r.s),borderColor:teal,backgroundColor:teal,tension:.3,yAxisID:'y1'},
-        {label:'K',data:hh.map(r=>r.k),borderColor:muted,backgroundColor:muted,borderDash:[4,3],tension:.3,yAxisID:'y1'}
+        {label:'K',data:hh.map(r=>r.k),borderColor:muted,backgroundColor:muted,borderDash:[4,3],tension:.3,yAxisID:'y1'},
+        {label:'分差誤差',data:hh.map(r=>r.e??null),borderColor:'#e0635c',backgroundColor:'#e0635c',tension:.3,yAxisID:'y1'}
       ]},
       options:{responsive:true,interaction:{mode:'index',intersect:false},
         plugins:{legend:{labels:{color:muted,font:{size:11},boxWidth:12}}},
@@ -2200,11 +2201,12 @@ async function autoCalibrate(){
       const sChanged=Math.abs(best-RUN_SIGMA)>0.01;
       if(sChanged){RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));}
       const hit=hitRateOf(samples);
+      const mErrA=samples.reduce((s,x)=>s+Math.abs(x.actM-x.m*MARGIN_K),0)/samples.length;
       const total=mergeLedger(samples.map(x=>({id:x.id,d:x.d,aw:x.aw,hm:x.hm,
         m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0,cat:x.cat||undefined})));
       pushCalibHist({d:etToday(),s:+RUN_SIGMA.toFixed(2),k:+MARGIN_K.toFixed(2),
-        hit:+(hit*100).toFixed(1),n:samples.length});
-      st.textContent=`✅ 今日自動校準(30天):K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近30天命中 ${(hit*100).toFixed(1)}% · 紀錄簿 ${total} 場`;
+        hit:+(hit*100).toFixed(1),e:+mErrA.toFixed(2),n:samples.length});
+      st.textContent=`✅ 今日自動校準(30天):K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近30天命中 ${(hit*100).toFixed(1)}% · 分差誤差 ${mErrA.toFixed(2)} 分 · 紀錄簿 ${total} 場`;
       if(kChanged||sChanged)loadDay(true);
     }else{
       st.textContent='今日自動校準:樣本不足,略過(球季初屬正常)';
@@ -2311,7 +2313,7 @@ $('calibRun').addEventListener('click',async()=>{
     if(ap)ap.addEventListener('click',()=>{
       MARGIN_K=nk;localStorage.setItem('mlb_mk',String(nk));
       RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));
-      pushCalibHist({d:etToday(),s:+best.toFixed(2),k:+nk.toFixed(2),hit:+(hitRate*100).toFixed(1),n:samples.length});
+      pushCalibHist({d:etToday(),s:+best.toFixed(2),k:+nk.toFixed(2),hit:+(hitRate*100).toFixed(1),e:+mErr.toFixed(2),n:samples.length});
       ap.textContent='已套用 ✓';ap.disabled=true;renderCalibHist();loadDay();
     });
     const rs=$('calibReset');
