@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.16 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.0 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2079,11 +2079,34 @@ $('calibBtn').addEventListener('click',()=>{
   if(!$('calibSec').classList.contains('hidden')){renderCalibHist();$('calibSec').scrollIntoView({behavior:'smooth'});}
 });
 let calibRunning=false;
-function calibHist(){try{return JSON.parse(localStorage.getItem('mlb_calib_hist'))||[]}catch(e){return[]}}
-function pushCalibHist(rec){const h=calibHist();h.push(rec);while(h.length>60)h.shift();
+/* ☁ 雲端校準:讀取 Actions 每日產出的 calib.json,全裝置共用 */
+window._cloud=null;
+async function loadCloudCalib(){
+  try{
+    const r=await fetch('calib.json?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(!d||!d.updated)return;
+    const age=(Date.now()-new Date(d.updated).getTime())/36e5;
+    if(age>48)return; // 超過 48 小時視為過期,退回本機模式
+    window._cloud=d;
+    if(isFinite(d.sigma))RUN_SIGMA=d.sigma;
+    if(isFinite(d.k))MARGIN_K=d.k;
+    localStorage.setItem('mlb_sigma',String(RUN_SIGMA));
+    localStorage.setItem('mlb_mk',String(MARGIN_K));
+  }catch(e){}
+}
+function calibHist(){
+  if(window._cloud&&Array.isArray(window._cloud.hist))return window._cloud.hist;try{return JSON.parse(localStorage.getItem('mlb_calib_hist'))||[]}catch(e){return[]}}
+function pushCalibHist(rec){
+  if(window._cloud)return; // 雲端模式:履歷由伺服器維護
+  const h=calibHist();h.push(rec);while(h.length>60)h.shift();
   localStorage.setItem('mlb_calib_hist',JSON.stringify(h));}
-function ledger(){try{return JSON.parse(localStorage.getItem('mlb_ledger'))||[]}catch(e){return[]}}
+function ledger(){
+  if(window._cloud&&Array.isArray(window._cloud.ledger))return window._cloud.ledger;
+  try{return JSON.parse(localStorage.getItem('mlb_ledger'))||[]}catch(e){return[]}}
 function mergeLedger(entries){
+  if(window._cloud)return window._cloud.ledger.length; // 雲端模式:紀錄簿由伺服器維護
   const L=ledger(),seen=new Set(L.map(x=>x.id));
   entries.forEach(e=>{if(!seen.has(e.id)){L.push(e);seen.add(e.id);}});
   while(L.length>600)L.shift();
@@ -2098,7 +2121,7 @@ function renderCalibHist(){
   if(L.length){
     const hits=L.filter(x=>x.hit).length;
     const mae=L.reduce((s,x)=>s+Math.abs(x.am-x.m*MARGIN_K),0)/L.length;
-    html+=`<div class="pos-group" style="margin-top:14px">預測紀錄簿(此裝置累計)</div>
+    html+=`<div class="pos-group" style="margin-top:14px">${window._cloud?'預測紀錄簿(☁ 雲端同步·全裝置一致·整季累積)':'預測紀錄簿(此裝置累計)'}</div>
       <div style="font-size:13.5px">已記錄 <b>${L.length}</b> 場:命中率 <b>${(hits/L.length*100).toFixed(1)}%</b>、分差平均誤差 <b>${mae.toFixed(2)} 分</b>、分差±2分內命中 <b>${(L.filter(x=>Math.abs(x.am-x.m*MARGIN_K)<=2).length/L.length*100).toFixed(1)}%</b>、目前參數 K=${MARGIN_K.toFixed(2)}、σ=${RUN_SIGMA.toFixed(2)}</div>`;
   }
   if(h.length){
@@ -2134,6 +2157,28 @@ function renderCalibHist(){
     });
   }
 }
+/* 回填歷史分差統計:紀錄簿 + 當日 K 重建 */
+function backfillMarginHist(){
+  if(window._cloud)return;
+  try{
+    const H=calibHist(); const L=ledger();
+    if(!H.length||!L.length)return;
+    let changed=false;
+    H.forEach(r=>{
+      if(r.e!=null&&r.h2!=null)return;
+      const start=shiftDate(r.d,-29);
+      const sub=L.filter(x=>x.d>=start&&x.d<=r.d&&x.m!=null&&x.am!=null);
+      if(sub.length<30)return;
+      const K=r.k!=null?r.k:1;
+      const errs=sub.map(x=>Math.abs(x.am-x.m*K));
+      if(r.e==null){r.e=+(errs.reduce((a,b)=>a+b,0)/errs.length).toFixed(2);changed=true;}
+      if(r.h2==null){r.h2=+((errs.filter(v=>v<=2).length/errs.length)*100).toFixed(1);changed=true;}
+    });
+    if(changed)localStorage.setItem('mlb_calib_hist',JSON.stringify(H));
+  }catch(e){}
+}
+backfillMarginHist();
+
 async function collectSamples(days,prog){
   const season=+etToday().slice(0,4);
   const ex=await fetchTeamExtras(season,shiftDate(etToday(),-1));
@@ -2188,6 +2233,12 @@ const coverRateOf=samples=>samples.filter(x=>(x.m>=0?x.actM:-x.actM)>=Math.abs(x
 
 /* 每日自動校準:K(分差)→ σ(勝率)→ 記錄 */
 async function autoCalibrate(){
+  if(window._cloud){
+    const st=$('status');
+    const upd=new Date(window._cloud.updated);
+    st.textContent=`☁ 雲端校準已同步(全裝置一致):K=${MARGIN_K.toFixed(2)} σ=${RUN_SIGMA.toFixed(2)} · ${window._cloud.window||60}天窗口 · 紀錄簿 ${window._cloud.ledger?.length||0} 場 · 更新於 ${upd.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+    return;
+  }
   if(calibRunning)return;
   if(localStorage.getItem('mlb_calib_last')===etToday())return;
   calibRunning=true;
@@ -2877,7 +2928,7 @@ $('prevBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,-1);loadD
 $('nextBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,1);loadDay();});
 $('todayBtn').addEventListener('click',()=>{dp.value=etToday();loadDay();});
 dp.addEventListener('change',()=>loadDay());
-loadDay().then(()=>autoCalibrate());
+loadCloudCalib().finally(()=>loadDay().then(()=>autoCalibrate()));
 </script>
 </body>
 </html>
