@@ -1,0 +1,27 @@
+name: 每日雲端校準
+
+on:
+  schedule:
+    - cron: '20 9 * * *'   # 每天 UTC 09:20(美東清晨、台灣 17:20,當日比賽已全數結束)
+  workflow_dispatch:        # 也可在 Actions 頁面手動觸發
+
+permissions:
+  contents: write
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 執行校準
+        run: node scripts/calib.js
+      - name: 提交結果
+        run: |
+          git config user.name "calib-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add calib.json
+          git diff --cached --quiet || git commit -m "每日自動校準 $(date -u +%F)"
+          git push
