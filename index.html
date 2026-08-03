@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.15 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v10.16 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2099,14 +2099,14 @@ function renderCalibHist(){
     const hits=L.filter(x=>x.hit).length;
     const mae=L.reduce((s,x)=>s+Math.abs(x.am-x.m*MARGIN_K),0)/L.length;
     html+=`<div class="pos-group" style="margin-top:14px">預測紀錄簿(此裝置累計)</div>
-      <div style="font-size:13.5px">已記錄 <b>${L.length}</b> 場:命中率 <b>${(hits/L.length*100).toFixed(1)}%</b>、分差平均誤差 <b>${mae.toFixed(2)} 分</b>、目前參數 K=${MARGIN_K.toFixed(2)}、σ=${RUN_SIGMA.toFixed(2)}</div>`;
+      <div style="font-size:13.5px">已記錄 <b>${L.length}</b> 場:命中率 <b>${(hits/L.length*100).toFixed(1)}%</b>、分差平均誤差 <b>${mae.toFixed(2)} 分</b>、分差±2分內命中 <b>${(L.filter(x=>Math.abs(x.am-x.m*MARGIN_K)<=2).length/L.length*100).toFixed(1)}%</b>、目前參數 K=${MARGIN_K.toFixed(2)}、σ=${RUN_SIGMA.toFixed(2)}</div>`;
   }
   if(h.length){
     html+=`<div class="pos-group" style="margin-top:14px">校準履歷</div>
       <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;margin-bottom:8px"><canvas id="calibChart" height="150"></canvas></div>
       <div class="table-wrap"><table class="stat" style="min-width:400px">
-      <tr><th>日期</th><th>σ</th><th>K</th><th>近30天命中</th><th>分差誤差</th><th>樣本</th></tr>
-      ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.e!=null?r.e.toFixed(2):'-'}</td><td>${r.n}</td></tr>`).join('')}
+      <tr><th>日期</th><th>σ</th><th>K</th><th>近30天命中</th><th>分差誤差</th><th>分差±2命中</th><th>樣本</th></tr>
+      ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.e!=null?r.e.toFixed(2):'-'}</td><td>${r.h2!=null?r.h2+'%':'-'}</td><td>${r.n}</td></tr>`).join('')}
       </table></div>`;
   }
   el.innerHTML=html;
@@ -2121,7 +2121,8 @@ function renderCalibHist(){
         {label:'命中率%',data:hh.map(r=>r.hit),borderColor:amber,backgroundColor:amber,tension:.3,yAxisID:'y'},
         {label:'σ',data:hh.map(r=>r.s),borderColor:teal,backgroundColor:teal,tension:.3,yAxisID:'y1'},
         {label:'K',data:hh.map(r=>r.k),borderColor:muted,backgroundColor:muted,borderDash:[4,3],tension:.3,yAxisID:'y1'},
-        {label:'分差誤差',data:hh.map(r=>r.e??null),borderColor:'#e0635c',backgroundColor:'#e0635c',tension:.3,yAxisID:'y1'}
+        {label:'分差誤差',data:hh.map(r=>r.e??null),borderColor:'#e0635c',backgroundColor:'#e0635c',tension:.3,yAxisID:'y1'},
+        {label:'分差±2命中%',data:hh.map(r=>r.h2??null),borderColor:teal,backgroundColor:teal,borderDash:[5,4],tension:.3,yAxisID:'y'}
       ]},
       options:{responsive:true,interaction:{mode:'index',intersect:false},
         plugins:{legend:{labels:{color:muted,font:{size:11},boxWidth:12}}},
@@ -2182,6 +2183,8 @@ function bestSigma(samples,k){
   return {best,curB:brierFor(samples,RUN_SIGMA,MARGIN_K),bestB:brierFor(samples,best,k)};
 }
 const hitRateOf=samples=>samples.filter(x=>(x.m>=0)===x.homeWon).length/samples.length;
+const marginHitOf=(samples,tol)=>samples.filter(x=>Math.abs(x.actM-x.m*MARGIN_K)<=tol).length/samples.length;
+const coverRateOf=samples=>samples.filter(x=>(x.m>=0?x.actM:-x.actM)>=Math.abs(x.m*MARGIN_K)).length/samples.length;
 
 /* 每日自動校準:K(分差)→ σ(勝率)→ 記錄 */
 async function autoCalibrate(){
@@ -2202,11 +2205,12 @@ async function autoCalibrate(){
       if(sChanged){RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));}
       const hit=hitRateOf(samples);
       const mErrA=samples.reduce((s,x)=>s+Math.abs(x.actM-x.m*MARGIN_K),0)/samples.length;
+      const mh2A=marginHitOf(samples,2);
       const total=mergeLedger(samples.map(x=>({id:x.id,d:x.d,aw:x.aw,hm:x.hm,
         m:+x.m.toFixed(2),am:x.actM,hit:((x.m>=0)===x.homeWon)?1:0,cat:x.cat||undefined})));
       pushCalibHist({d:etToday(),s:+RUN_SIGMA.toFixed(2),k:+MARGIN_K.toFixed(2),
-        hit:+(hit*100).toFixed(1),e:+mErrA.toFixed(2),n:samples.length});
-      st.textContent=`✅ 今日自動校準(30天):K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近30天命中 ${(hit*100).toFixed(1)}% · 分差誤差 ${mErrA.toFixed(2)} 分 · 紀錄簿 ${total} 場`;
+        hit:+(hit*100).toFixed(1),e:+mErrA.toFixed(2),h2:+(mh2A*100).toFixed(1),n:samples.length});
+      st.textContent=`✅ 今日自動校準(30天):K=${MARGIN_K.toFixed(2)}${kChanged?'*':''} σ=${RUN_SIGMA.toFixed(2)}${sChanged?'*':''} · 近30天命中 ${(hit*100).toFixed(1)}% · 分差誤差 ${mErrA.toFixed(2)} 分 · 分差±2命中 ${(mh2A*100).toFixed(0)}% · 紀錄簿 ${total} 場`;
       if(kChanged||sChanged)loadDay(true);
     }else{
       st.textContent='今日自動校準:樣本不足,略過(球季初屬正常)';
@@ -2273,7 +2277,10 @@ $('calibRun').addEventListener('click',async()=>{
     const verdict=changes.length?`建議調整 ${changes.join('、')}(均含阻尼)。`:`目前 K=${MARGIN_K.toFixed(2)}、σ=${RUN_SIGMA.toFixed(2)} 已是最誠實設定,不需調整。`;
     out.innerHTML=`
       <div style="margin-bottom:8px">回測 ${days} 天、共 <b>${samples.length}</b> 場(另 ${skipped} 場資料不足):
-        命中率 <b>${(hitRate*100).toFixed(1)}%</b>、分差平均誤差 <b>${mErr.toFixed(2)} 分</b>、Brier ${curB.toFixed(4)} → ${bestB.toFixed(4)}。紀錄簿累計 ${total} 場。</div>
+        命中率 <b>${(hitRate*100).toFixed(1)}%</b>、分差平均誤差 <b>${mErr.toFixed(2)} 分</b>、
+        分差命中率(±2分內)<b>${(marginHitOf(samples,2)*100).toFixed(1)}%</b>(±1分:${(marginHitOf(samples,1)*100).toFixed(0)}%、±3分:${(marginHitOf(samples,3)*100).toFixed(0)}%)、
+        實際超出預測幅度比例 ${(coverRateOf(samples)*100).toFixed(0)}%(理想≈50%)、
+        Brier ${curB.toFixed(4)} → ${bestB.toFixed(4)}。紀錄簿累計 ${total} 場。</div>
       <div class="pos-group">勝率信心 vs 實際</div>
       <div class="table-wrap"><table class="stat" style="min-width:420px">
         <tr><th>模型信心</th><th>場數</th><th>平均信心</th><th>實際命中</th><th>偏差</th></tr>${rows}</table></div>
@@ -2313,7 +2320,7 @@ $('calibRun').addEventListener('click',async()=>{
     if(ap)ap.addEventListener('click',()=>{
       MARGIN_K=nk;localStorage.setItem('mlb_mk',String(nk));
       RUN_SIGMA=best;localStorage.setItem('mlb_sigma',String(best));
-      pushCalibHist({d:etToday(),s:+best.toFixed(2),k:+nk.toFixed(2),hit:+(hitRate*100).toFixed(1),e:+mErr.toFixed(2),n:samples.length});
+      pushCalibHist({d:etToday(),s:+best.toFixed(2),k:+nk.toFixed(2),hit:+(hitRate*100).toFixed(1),e:+mErr.toFixed(2),h2:+(marginHitOf(samples,2)*100).toFixed(1),n:samples.length});
       ap.textContent='已套用 ✓';ap.disabled=true;renderCalibHist();loadDay();
     });
     const rs=$('calibReset');
