@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.0 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.1 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2846,6 +2846,7 @@ async function updateFavToday(games,date,force){
       if(!el)continue;
       const inf=info[f.id];
       if(!inf||!inf.team){el.textContent='(查無所屬球隊)';el.style.color='var(--muted)';continue;}
+      if(!TEAM_ID[inf.team]){el.textContent='非大聯盟編制(交易/下放小聯盟)';el.style.color='var(--muted)';continue;}
       const g=byTeam[inf.team];
       if(!g){el.textContent=`${lab}未出賽(球隊休兵)`;el.style.color='var(--muted)';continue;}
       if(g.status!=='Live'&&g.status!=='Final'){
