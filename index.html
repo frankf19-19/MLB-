@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.1 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.4 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -758,6 +758,28 @@ async function fetchTeamExtras(season,asOf){
 }
 
 /* 近3天賽程快取(牛棚疲勞估算用) */
+/* 官方敘述偶含未解析佔位符 ${person|fullName|id},自行解析 */
+const nameCache={};
+function fixDesc(s){
+  if(!s||s.indexOf('${')<0)return s;
+  return s.replace(/\$\{person\|[^|}]+\|(\d+)\}/g,(m,id)=>nameCache[id]||'')
+          .replace(/\$\{[^}]*\}/g,'')
+          .replace(/\s{2,}/g,' ').trim();
+}
+async function resolveScoringNames(games){
+  const ids=new Set();
+  const re=/\$\{person\|[^|}]+\|(\d+)\}/g;
+  games.forEach(g=>(g.scoring||[]).forEach(sp=>{
+    let m;while((m=re.exec(sp.desc||'')))if(!nameCache[m[1]])ids.add(m[1]);
+  }));
+  if(ids.size){
+    try{
+      const d=await jget(`${API}/people?personIds=${[...ids].join(',')}&fields=people,id,fullName`);
+      (d.people||[]).forEach(p=>{nameCache[p.id]=p.fullName;});
+    }catch(e){}
+  }
+  games.forEach(g=>(g.scoring||[]).forEach(sp=>{sp.desc=fixDesc(sp.desc);}));
+}
 const schedCache={};
 async function fetchGamesCached(date){
   if(schedCache[date])return schedCache[date];
@@ -1076,7 +1098,7 @@ function gameCard(g,p,rv){
     <div class="prob"><div class="prob-bar"><div class="away" style="width:${la?100-Math.round(la.lp*100):ap}%"></div><div class="home" style="width:${la?Math.round(la.lp*100):hp}%"></div></div>
       <div class="prob-lbl"><span>${la?'即時 ':''}客 <b>${la?100-Math.round(la.lp*100):ap}%</b></span><span><b>${la?Math.round(la.lp*100):hp}%</b> 主${la?' 即時':''}</span></div></div>
     ${la?`<div class="why" style="border-top:none;margin-top:8px;padding-top:0"><span class="k" style="color:var(--amber)">即時戰況</span>${esc(la.text)}</div>`:''}
-    ${((isLive||isFinal)&&g.scoring&&g.scoring.length)?`<div class="why"${la?' style="border-top:none;margin-top:6px;padding-top:0"':''}><span class="k" style="color:var(--teal)">${isLive?'即時重點':'比賽重點'}</span>${g.scoring.slice(-2).map(s=>`<span class="pstat">[${s.inn}局${s.half==='top'?'上':'下'}]</span> ${esc(s.desc)}`).join('<br>')}</div>`:''}
+    ${((isLive||isFinal)&&g.scoring&&g.scoring.length)?`<div class="why"${la?' style="border-top:none;margin-top:6px;padding-top:0"':''}><span class="k" style="color:var(--teal)">${isLive?'即時重點':'比賽重點'}</span>${g.scoring.slice(-2).map(s=>`<span class="pstat">[${s.inn}局${s.half==='top'?'上':'下'}]</span> ${esc(fixDesc(s.desc))}`).join('<br>')}</div>`:''}
     <div class="why"><span class="k">預測理由</span>${esc(p.why)}</div>
     ${rv?`<div class="review ${rv.hit?'good':'bad'}"><span class="k">${rv.hit?'賽後檢討 ✓':'賽後檢討 ✗'}</span>${esc(rv.text)}</div>`:''}
   </div>`;
@@ -1156,6 +1178,7 @@ async function loadDay(quiet){
     const season=+date.slice(0,4);
     const [pm,games,ex,fatMap]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season,asOf),bpFatigue(date).catch(()=>({}))]);
     ex.fatigue=fatMap;
+    await resolveScoringNames(games).catch(()=>{});
     const lg=leagueRPG(pm);
     const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
     const ps=await fetchPitcherStats(pitIds,season,asOf);
@@ -1164,6 +1187,7 @@ async function loadDay(quiet){
     games.sort((a,b)=>wgt(a)-wgt(b));
     let hits=0,finals=0,errSum=0,errN=0,html='';
     const reviews=[];curGames=games;curPreds=[];
+    const focusArr=[];
     games.forEach(g=>{
       const A=pm[g.awayId],H=pm[g.homeId];
       g.awayRec=A?`${A.w}-${A.l}`:''; g.homeRec=H?`${H.w}-${H.l}`:'';
@@ -1174,8 +1198,23 @@ async function loadDay(quiet){
       if(rv){rv.g=g;finals++;if(rv.hit)hits++;
         if(p.raw_margin!=null){errSum+=Math.abs(rv.actMargin-p.raw_margin);errN++;}}
       reviews.push(rv);html+=gameCard(g,p,rv);
+      if(p&&p.home_prob!=null&&g.status!=='Final'&&!isSpecial){
+        const conf=Math.max(p.home_prob,1-p.home_prob);
+        focusArr.push({conf,pick:p.predicted_winner,vs:p.home_prob>=.5?g.away:g.home,
+          live:g.status==='Live',m:Math.abs((p.raw_margin||0))});
+      }
     });
-    $('games').innerHTML=html||`<div class="empty">${date} 沒有排定的比賽(可能是明星賽或休兵日)。</div>`;
+    // 🎯 本日焦點:模型最有把握的場次(誠實版大膽:把握大的大聲說)
+    let focusHtml='';
+    const top=focusArr.filter(x=>x.conf>=0.60).sort((a,b)=>b.conf-a.conf).slice(0,3);
+    if(top.length){
+      focusHtml=`<div class="analysis" style="border-left-color:var(--amber);margin-bottom:14px">
+        <span class="k" style="color:var(--amber)">🎯 本日焦點</span>模型今日最有把握:
+        ${top.map(x=>`<b>${esc(x.pick)}</b> 勝 ${esc(x.vs)}(${(x.conf*100).toFixed(0)}%${x.live?' · 🔴進行中':''})`).join('、')}
+        ${top[0].conf>=0.68?' — 今日有高信心場次,值得關注。':''}
+      </div>`;
+    }
+    $('games').innerHTML=(focusHtml+html)||`<div class="empty">${date} 沒有排定的比賽(可能是明星賽或休兵日)。</div>`;
     $('listTitle').textContent=date+' 比賽';
     $('listTag').textContent=games.length?games.length+' 場':'';
     $('dayPct').textContent=finals?((hits/finals*100).toFixed(1)+'%'):'—';
@@ -1605,6 +1644,34 @@ function playFeedHtml(allPlays){
   });
   return html+'</div>';
 }
+function pitTable(side,box,decisions){
+  const t=box.teams?.[side]; if(!t)return '';
+  const ids=t.pitchers||[];
+  if(!ids.length)return '';
+  const dec=decisions||{};
+  const rows=ids.map((id,idx)=>{
+    const pl=t.players?.['ID'+id]; if(!pl)return '';
+    const pi=pl.stats?.pitching||{};
+    if(!(parseFloat(pi.inningsPitched)>0||pi.battersFaced>0))return '';
+    let tag='';
+    if(dec.winner?.id===id)tag=' <span style="color:var(--teal);font-weight:700">勝</span>';
+    else if(dec.loser?.id===id)tag=' <span style="color:var(--miss);font-weight:700">敗</span>';
+    else if(dec.save?.id===id)tag=' <span style="color:var(--amber);font-weight:700">救援</span>';
+    const era=pl.seasonStats?.pitching?.era||'';
+    const good=(parseFloat(pi.inningsPitched)>=5&&(pi.earnedRuns??9)<=2)||((pi.strikeOuts||0)>=4&&(pi.runs??9)<=1);
+    const bad=(pi.runs||0)>=4;
+    const mark=good?'🔥 ':(bad?'❄️ ':'');
+    const nm=`<span class="pnm" data-pid="${id}" style="cursor:pointer;${idx>0?'':'font-weight:700'}">${idx>0?'↳ ':''}${mark}${esc(pl.person?.fullName||'')}</span>${tag}`;
+    return `<tr><td style="text-align:left">${nm}</td>
+      <td>${esc(pi.inningsPitched||'0.0')}</td><td>${pi.hits??0}</td><td>${pi.runs??0}</td><td>${pi.earnedRuns??0}</td>
+      <td>${pi.baseOnBalls??0}</td><td>${pi.strikeOuts??0}</td><td>${pi.homeRuns??0}</td>
+      <td>${pi.numberOfPitches??pi.pitchesThrown??'-'}</td><td>${esc(era)}</td></tr>`;
+  }).filter(Boolean).join('');
+  if(!rows)return '';
+  return `<div class="pos-group">${esc(t.team?.name||side)} 投手(依登板順序)</div><div class="table-wrap"><table class="stat">
+    <tr><th style="text-align:left">投手</th><th>IP</th><th>被安</th><th>失分</th><th>自責</th><th>保送</th><th>K</th><th>被轟</th><th>用球</th><th>ERA</th></tr>
+    ${rows}</table></div>`;
+}
 function boxTable(side,box){
   const t=box.teams?.[side]; if(!t)return '';
   // 完整出賽名單:batters 含先發、代打、代跑、被換下的所有人
@@ -1701,7 +1768,8 @@ async function loadGame(gid){
         <div class="pitchlist">${pitchRows}</div>
       </div>`:'';
     const playsHtml='';
-    const boxes=boxTable('away',box)+boxTable('home',box);
+    const dec=ld.decisions||{};
+    const boxes=boxTable('away',box)+pitTable('away',box,dec)+boxTable('home',box)+pitTable('home',box,dec);
     $('gdTag').textContent=st==='Live'?'每 20 秒自動更新':'';
     $('gameDetail').innerHTML=`
       <div class="gd-score">
