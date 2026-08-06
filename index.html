@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.4 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.6 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1208,15 +1208,19 @@ async function loadDay(quiet){
     let focusHtml='';
     const top=focusArr.filter(x=>x.conf>=0.60).sort((a,b)=>b.conf-a.conf).slice(0,3);
     if(top.length){
-      focusHtml=`<div class="analysis" style="border-left-color:var(--amber);margin-bottom:14px">
+      focusHtml=`<div class="analysis" style="border-left-color:var(--amber);margin-bottom:6px;grid-column:1/-1;height:auto">
         <span class="k" style="color:var(--amber)">🎯 本日焦點</span>模型今日最有把握:
         ${top.map(x=>`<b>${esc(x.pick)}</b> 勝 ${esc(x.vs)}(${(x.conf*100).toFixed(0)}%${x.live?' · 🔴進行中':''})`).join('、')}
         ${top[0].conf>=0.68?' — 今日有高信心場次,值得關注。':''}
       </div>`;
     }
     $('games').innerHTML=(focusHtml+html)||`<div class="empty">${date} 沒有排定的比賽(可能是明星賽或休兵日)。</div>`;
-    $('listTitle').textContent=date+' 比賽';
-    $('listTag').textContent=games.length?games.length+' 場':'';
+    const _md=s=>s.slice(5).replace('-','/');
+    $('listTitle').textContent=`${date} 比賽`;
+    $('listTag2')&&0; // noop
+    const tzNote=`台灣 ${_md(date)} 深夜 ~ ${_md(shiftDate(date,1))} 中午`;
+    $('listTag').title=tzNote;
+    $('listTag').textContent=games.length?`${games.length} 場 · 台灣 ${_md(date)}深夜~${_md(shiftDate(date,1))}中午`:'';
     $('dayPct').textContent=finals?((hits/finals*100).toFixed(1)+'%'):'—';
     $('dayRec').textContent=finals?(hits+' / '+finals):'0 / 0';
     $('dayErr').textContent=errN?(r1(errSum/errN)+' 分'):'—';
