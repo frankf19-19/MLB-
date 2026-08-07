@@ -175,6 +175,27 @@ async function bpFatigue(date){
   return f;
 }
 
+/* ⑫ 當日打線名單(與網頁版一致;回測用實際先發九人) */
+async function fetchLineupRatio(g,exMap){
+  try{
+    const box=await jget(`${API}/game/${g.id}/boxscore`);
+    const calc=side=>{
+      const t=box.teams?.[side];const order=t?.battingOrder||[];
+      if(order.length<9)return null;
+      const arr=order.slice(0,9).map(id=>parseFloat(t.players?.['ID'+id]?.seasonStats?.batting?.ops))
+        .filter(v=>isFinite(v)&&v>0);
+      if(arr.length<7)return null;
+      return arr.reduce((a,b)=>a+b,0)/arr.length;
+    };
+    const a=calc('away'),h=calc('home');
+    return {
+      a:(a&&isFinite(exMap[g.awayId]?.ops)&&exMap[g.awayId].ops>0)?a/exMap[g.awayId].ops:null,
+      h:(h&&isFinite(exMap[g.homeId]?.ops)&&exMap[g.homeId].ops>0)?h/exMap[g.homeId].ops:null
+    };
+  }catch(e){return null;}
+}
+const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.06,Math.min(0.06,(r-1)*0.5));};
+
 /* ⑪ 球隊偏差校正(與網頁版一致) */
 function computeTeamBias(ledger,K){
   if(!ledger||ledger.length<150)return {};
@@ -223,7 +244,8 @@ function predict(g,pm,lg,ps,ex,teamBias){
   const venMix=(base,split)=>isFinite(split)?base*0.8+split*0.2:base;
   const hOffV=venMix(hPl,exH.homeRSg),aOffV=venMix(aPl,exA.awayRSg);
   const hDefV=venMix(hDef,exH.homeRAg),aDefV=venMix(aDef,exA.awayRAg);
-  let expHome=(hOffV/lg)*(aDefV/lg)*lg+HOME_RUN_BOOST,expAway=(aOffV/lg)*(hDefV/lg)*lg;
+  const luH=luAdj(g.luH),luA=luAdj(g.luA);
+  let expHome=(hOffV*luH/lg)*(aDefV/lg)*lg+HOME_RUN_BOOST,expAway=(aOffV*luA/lg)*(hDefV/lg)*lg;
   const fat=ex?.fatigue||{};
   if((fat[g.homeId]||0)>=3.5)expAway+=0.2;
   if((fat[g.awayId]||0)>=3.5)expHome+=0.2;
@@ -304,18 +326,20 @@ function classifyMiss(g,p,K,SIG){
       const ps=await fetchPitcherStats(pitIds,season,asOf);
       const ex2=Object.assign({},ex,{fatigue:fat});
       let added=0;
-      games.forEach(g=>{
-        if(g.status!=='Final')return;
-        if(/postpon|suspend|cancel/i.test(g.detail||''))return;
-        const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)return;
-        if(seen.has(g.id))return;
-        const p=predict(g,pm,lg,ps,ex2,teamBias);if(!p)return;
+      for(const g of games){
+        if(g.status!=='Final')continue;
+        if(/postpon|suspend|cancel/i.test(g.detail||''))continue;
+        const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)continue;
+        if(seen.has(g.id))continue;
+        const lu=await fetchLineupRatio(g,ex.map||{});
+        if(lu){g.luA=lu.a;g.luH=lu.h;}
+        const p=predict(g,pm,lg,ps,ex2,teamBias);if(!p)continue;
         const hit=((p.mPre>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
         seen.add(g.id);added++;
-      });
+      }
       console.log(`${date}: +${added} 場`);
     }catch(e){console.log(`${date}: 跳過(${e.message})`);}
   }
