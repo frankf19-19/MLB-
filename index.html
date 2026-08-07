@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.7 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.8 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -801,6 +801,31 @@ async function bpFatigue(date){
   return f;
 }
 
+/* ⑫ 當日打線名單:先發九人 OPS vs 全隊平均 */
+const lineupCache={};
+async function fetchLineupRatio(g,ex){
+  if(lineupCache[g.id]!==undefined)return lineupCache[g.id];
+  try{
+    const box=await jget(`${API}/game/${g.id}/boxscore`);
+    const calc=side=>{
+      const t=box.teams?.[side];const order=t?.battingOrder||[];
+      if(order.length<9)return null;
+      const arr=order.slice(0,9).map(id=>parseFloat(t.players?.['ID'+id]?.seasonStats?.batting?.ops))
+        .filter(v=>isFinite(v)&&v>0);
+      if(arr.length<7)return null;
+      return arr.reduce((a,b)=>a+b,0)/arr.length;
+    };
+    const a=calc('away'),h=calc('home');
+    const exm=ex?.map||{};
+    const r={
+      a:(a&&isFinite(exm[g.awayId]?.ops)&&exm[g.awayId].ops>0)?a/exm[g.awayId].ops:null,
+      h:(h&&isFinite(exm[g.homeId]?.ops)&&exm[g.homeId].ops>0)?h/exm[g.homeId].ops:null
+    };
+    lineupCache[g.id]=(r.a||r.h)?r:null;return lineupCache[g.id];
+  }catch(e){lineupCache[g.id]=null;return null;}
+}
+const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.06,Math.min(0.06,(r-1)*0.5));};
+
 /* ⑪ 球隊偏差校正:從紀錄簿殘差學習(收縮 n/(n+100),封頂±0.25) */
 let _teamBias=null;
 function computeTeamBias(){
@@ -866,7 +891,8 @@ function predict(g,pm,lg,ps,ex){
   const hOffV=venMix(hPl.v,exH.homeRSg), aOffV=venMix(aPl.v,exA.awayRSg);
   const hDefV=venMix(hDef.v,exH.homeRAg), aDefV=venMix(aDef.v,exA.awayRAg);
 
-  let expHome=(hOffV/lg)*(aDefV/lg)*lg+HOME_RUN_BOOST, expAway=(aOffV/lg)*(hDefV/lg)*lg;
+  const luH=luAdj(g.luH), luA=luAdj(g.luA);
+  let expHome=(hOffV*luH/lg)*(aDefV/lg)*lg+HOME_RUN_BOOST, expAway=(aOffV*luA/lg)*(hDefV/lg)*lg;
 
   // ② 牛棚疲勞:三連戰+昨日惡戰(一分差/延長)→ 對手得分期望 +0.2
   const fat=ex?.fatigue||{};
@@ -969,6 +995,12 @@ function predict(g,pm,lg,ps,ex){
   if(aStV&&Math.abs(aStV.venAdj||0)>=0.15)venNotes.push(`客隊先發${aStV.venAdj<0?'客場不怯':'客場走樣'}`);
   if(venNotes.length)why+=`先發主客場拆分:${venNotes.join('、')}(已微調)。`;
   if(Math.abs(biasAdj)>=0.15)why+=`紀錄簿校正:模型歷史上對${biasAdj>0?'主隊略低估':'客隊略低估'},已依殘差微調(${biasAdj>0?'+':''}${biasAdj.toFixed(2)})。`;
+  const luNotes=[];
+  if(luH<=0.985)luNotes.push(`主隊今日名單較平日偏弱(×${luH.toFixed(2)})`);
+  else if(luH>=1.015)luNotes.push(`主隊今日名單火力較強(×${luH.toFixed(2)})`);
+  if(luA<=0.985)luNotes.push(`客隊今日名單較平日偏弱(×${luA.toFixed(2)})`);
+  else if(luA>=1.015)luNotes.push(`客隊今日名單火力較強(×${luA.toFixed(2)})`);
+  if(luNotes.length)why+=`當日打線:${luNotes.join('、')}。`;
   if(hPl.used||aPl.used){
     const seg=[];
     if(hPl.used)seg.push(`主隊打線對${aSt?.hand==='L'?'左':'右'}投${hPl.ratio>1?'較強':'偏弱'}(×${hPl.ratio.toFixed(2)})`);
@@ -1208,6 +1240,12 @@ async function loadDay(quiet){
     const [pm,games,ex,fatMap]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season,asOf),bpFatigue(date).catch(()=>({}))]);
     ex.fatigue=fatMap;
     await resolveScoringNames(games).catch(()=>{});
+    if(date===etToday()){
+      await Promise.all(games.filter(g=>g.status!=='Final').map(async g=>{
+        const r=await fetchLineupRatio(g,ex);
+        if(r){g.luA=r.a;g.luH=r.h;}
+      }));
+    }
     const lg=leagueRPG(pm);
     const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
     const ps=await fetchPitcherStats(pitIds,season,asOf);
