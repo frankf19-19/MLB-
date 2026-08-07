@@ -55,7 +55,7 @@ async function fetchGames(date){
   const games=[];
   (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(g=>{
     const ls=g.linescore||{};
-    games.push({id:g.gamePk,detail:g.status?.detailedState||'',
+    games.push({id:g.gamePk,ts:g.gameDate,detail:g.status?.detailedState||'',
       status:g.status?.abstractGameState||'',
       away:g.teams?.away?.team?.name,home:g.teams?.home?.team?.name,
       awayId:g.teams?.away?.team?.id,homeId:g.teams?.home?.team?.id,
@@ -175,6 +175,31 @@ async function bpFatigue(date){
   return f;
 }
 
+/* ⑬ 天氣層(與網頁版一致) */
+const PARK_GEO={144:[33.891,-84.468],110:[39.284,-76.622],111:[42.346,-71.097],
+  112:[41.948,-87.655],145:[41.830,-87.634],113:[39.097,-84.507],114:[41.496,-81.685],
+  115:[39.756,-104.994],116:[42.339,-83.049],118:[39.051,-94.480],108:[33.800,-117.883],
+  119:[34.074,-118.240],142:[44.982,-93.278],121:[40.757,-73.846],147:[40.829,-73.926],
+  133:[38.580,-121.513],143:[39.906,-75.166],134:[40.447,-80.006],135:[32.707,-117.157],
+  137:[37.778,-122.389],138:[38.622,-90.193],139:[27.980,-82.507],120:[38.873,-77.007]};
+const wxCache={};
+async function fetchWxTemp(teamId,tsIso){
+  const geo=PARK_GEO[teamId];
+  if(!geo||!tsIso)return null;
+  try{
+    const key='w'+teamId;
+    if(wxCache[key]===undefined){
+      const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${geo[0]}&longitude=${geo[1]}&hourly=temperature_2m&past_days=3&forecast_days=2&timezone=auto`);
+      wxCache[key]=r.ok?await r.json():null;
+    }
+    const d=wxCache[key];
+    if(!d||!d.hourly||!d.hourly.time)return null;
+    const local=new Date(new Date(tsIso).getTime()+(d.utc_offset_seconds||0)*1000).toISOString().slice(0,13);
+    const idx=d.hourly.time.findIndex(t=>t.startsWith(local));
+    return idx>=0?d.hourly.temperature_2m[idx]:null;
+  }catch(e){return null;}
+}
+
 /* ⑫ 當日打線名單(與網頁版一致;回測用實際先發九人) */
 async function fetchLineupRatio(g,exMap){
   try{
@@ -277,6 +302,10 @@ function predict(g,pm,lg,ps,ex,teamBias){
   if(bpA!=null)expHome+=bpA;
   const pf=PARK_F[g.homeId]||1;
   if(pf!==1){expHome*=pf;expAway*=pf;}
+  if(Number.isFinite(g.wxTemp)){
+    const wxAdj=Math.max(-0.5,Math.min(0.5,0.023*(g.wxTemp-21)));
+    expHome+=wxAdj/2;expAway+=wxAdj/2;
+  }
   if(teamBias){
     let b=(teamBias[g.home]||0)-(teamBias[g.away]||0);
     b=Math.max(-0.4,Math.min(0.4,b));
@@ -333,6 +362,8 @@ function classifyMiss(g,p,K,SIG){
         if(seen.has(g.id))continue;
         const lu=await fetchLineupRatio(g,ex.map||{});
         if(lu){g.luA=lu.a;g.luH=lu.h;}
+        const wt=await fetchWxTemp(g.homeId,g.ts);
+        if(Number.isFinite(wt))g.wxTemp=wt;
         const p=predict(g,pm,lg,ps,ex2,teamBias);if(!p)continue;
         const hit=((p.mPre>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
