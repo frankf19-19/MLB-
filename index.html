@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.6 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.7 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -801,6 +801,26 @@ async function bpFatigue(date){
   return f;
 }
 
+/* ⑪ 球隊偏差校正:從紀錄簿殘差學習(收縮 n/(n+100),封頂±0.25) */
+let _teamBias=null;
+function computeTeamBias(){
+  const L=ledger();
+  if(!L||L.length<150){_teamBias={};return;}
+  const acc={};
+  L.forEach(x=>{
+    if(x.m==null||x.am==null)return;
+    const r=x.am-x.m*MARGIN_K;
+    (acc[x.hm]=acc[x.hm]||{s:0,n:0}).s+=r;acc[x.hm].n++;
+    (acc[x.aw]=acc[x.aw]||{s:0,n:0}).s-=r;acc[x.aw].n++;
+  });
+  _teamBias={};
+  Object.entries(acc).forEach(([nm,a])=>{
+    if(a.n<20)return;
+    const raw=a.s/a.n;
+    _teamBias[nm]=Math.max(-0.25,Math.min(0.25,raw*a.n/(a.n+100)));
+  });
+}
+
 /* ---------- 預測模型 ---------- */
 function leagueRPG(pm){const v=Object.values(pm).filter(t=>t.rs!=null&&t.gp);
   return v.length?v.reduce((s,t)=>s+t.rs/t.gp,0)/v.length:null;}
@@ -919,6 +939,14 @@ function predict(g,pm,lg,ps,ex){
   // 球場因子:主場的得分環境同時影響雙方
   const pf=PARK_F[g.homeId]||1;
   if(pf!==1){expHome*=pf;expAway*=pf;}
+  // ⑪ 球隊偏差校正
+  let biasAdj=0;
+  if(_teamBias){
+    biasAdj=(_teamBias[g.home]||0)-(_teamBias[g.away]||0);
+    biasAdj=Math.max(-0.4,Math.min(0.4,biasAdj));
+    if(biasAdj>0)expHome+=biasAdj/2,expAway-=biasAdj/2;
+    else if(biasAdj<0)expHome+=biasAdj/2,expAway-=biasAdj/2;
+  }
   const marginPre=expHome-expAway;
   const mid=(expHome+expAway)/2, half=marginPre/2*MARGIN_K;
   expHome=mid+half; expAway=mid-half;
@@ -940,6 +968,7 @@ function predict(g,pm,lg,ps,ex){
   if(hStV&&Math.abs(hStV.venAdj||0)>=0.15)venNotes.push(`主隊先發${hStV.venAdj<0?'主場更穩':'主場偏弱'}`);
   if(aStV&&Math.abs(aStV.venAdj||0)>=0.15)venNotes.push(`客隊先發${aStV.venAdj<0?'客場不怯':'客場走樣'}`);
   if(venNotes.length)why+=`先發主客場拆分:${venNotes.join('、')}(已微調)。`;
+  if(Math.abs(biasAdj)>=0.15)why+=`紀錄簿校正:模型歷史上對${biasAdj>0?'主隊略低估':'客隊略低估'},已依殘差微調(${biasAdj>0?'+':''}${biasAdj.toFixed(2)})。`;
   if(hPl.used||aPl.used){
     const seg=[];
     if(hPl.used)seg.push(`主隊打線對${aSt?.hand==='L'?'左':'右'}投${hPl.ratio>1?'較強':'偏弱'}(×${hPl.ratio.toFixed(2)})`);
@@ -3001,7 +3030,7 @@ $('prevBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,-1);loadD
 $('nextBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,1);loadDay();});
 $('todayBtn').addEventListener('click',()=>{dp.value=etToday();loadDay();});
 dp.addEventListener('change',()=>loadDay());
-loadCloudCalib().finally(()=>loadDay().then(()=>autoCalibrate()));
+loadCloudCalib().finally(()=>{computeTeamBias();loadDay().then(()=>autoCalibrate());});
 </script>
 </body>
 </html>
