@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.10 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.11 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -629,7 +629,7 @@ async function fetchGames(date,lite){
   const out=[];
   (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(g=>{
     const h=g.teams.home,a=g.teams.away,ls=g.linescore||{};
-    out.push({id:g.gamePk,status:g.status?.abstractGameState||'',detail:g.status?.detailedState||'',
+    out.push({id:g.gamePk,ts:g.gameDate,status:g.status?.abstractGameState||'',detail:g.status?.detailedState||'',
       away:a.team.name,home:h.team.name,awayId:a.team.id,homeId:h.team.id,
       awayScore:a.score,homeScore:h.score,awayWin:a.isWinner,homeWin:h.isWinner,
       awayPit:a.probablePitcher?.fullName,homePit:h.probablePitcher?.fullName,
@@ -799,6 +799,31 @@ async function bpFatigue(date){
     }
   }));
   return f;
+}
+
+/* ⑬ 天氣層:開賽時刻氣溫(戶外球場;每高10°F總分約+0.23,文獻值) */
+const PARK_GEO={144:[33.891,-84.468],110:[39.284,-76.622],111:[42.346,-71.097],
+  112:[41.948,-87.655],145:[41.830,-87.634],113:[39.097,-84.507],114:[41.496,-81.685],
+  115:[39.756,-104.994],116:[42.339,-83.049],118:[39.051,-94.480],108:[33.800,-117.883],
+  119:[34.074,-118.240],142:[44.982,-93.278],121:[40.757,-73.846],147:[40.829,-73.926],
+  133:[38.580,-121.513],143:[39.906,-75.166],134:[40.447,-80.006],135:[32.707,-117.157],
+  137:[37.778,-122.389],138:[38.622,-90.193],139:[27.980,-82.507],120:[38.873,-77.007]};
+const wxCache={};
+async function fetchWxTemp(teamId,tsIso){
+  const geo=PARK_GEO[teamId];
+  if(!geo||!tsIso)return null;
+  const key='w'+teamId;
+  try{
+    if(wxCache[key]===undefined){
+      const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${geo[0]}&longitude=${geo[1]}&hourly=temperature_2m&past_days=1&forecast_days=2&timezone=auto`);
+      wxCache[key]=r.ok?await r.json():null;
+    }
+    const d=wxCache[key];
+    if(!d?.hourly?.time)return null;
+    const local=new Date(new Date(tsIso).getTime()+(d.utc_offset_seconds||0)*1000).toISOString().slice(0,13);
+    const idx=d.hourly.time.findIndex(t=>t.startsWith(local));
+    return idx>=0?d.hourly.temperature_2m[idx]:null;
+  }catch(e){return null;}
 }
 
 /* 分差落點引擎:1分/2分/3+分機率(常態離散化 + 紀錄簿實測校正) */
@@ -1018,6 +1043,12 @@ function predict(g,pm,lg,ps,ex){
   // 球場因子:主場的得分環境同時影響雙方
   const pf=PARK_F[g.homeId]||1;
   if(pf!==1){expHome*=pf;expAway*=pf;}
+  // ⑬ 天氣:氣溫對總分的影響(21°C 為中性)
+  let wxAdj=0;
+  if(Number.isFinite(g.wxTemp)){
+    wxAdj=Math.max(-0.5,Math.min(0.5,0.023*(g.wxTemp-21)));
+    expHome+=wxAdj/2;expAway+=wxAdj/2;
+  }
   // ⑪ 球隊偏差校正
   let biasAdj=0;
   if(_teamBias){
@@ -1054,6 +1085,7 @@ function predict(g,pm,lg,ps,ex){
   if(luA<=0.985)luNotes.push(`客隊今日名單較平日偏弱(×${luA.toFixed(2)})`);
   else if(luA>=1.015)luNotes.push(`客隊今日名單火力較強(×${luA.toFixed(2)})`);
   if(luNotes.length)why+=`當日打線:${luNotes.join('、')}。`;
+  if(Math.abs(wxAdj)>=0.15)why+=`天氣:開賽氣溫約 ${g.wxTemp.toFixed(0)}°C,${wxAdj>0?'炎熱有利進攻':'低溫壓抑攻勢'}(總分 ${wxAdj>0?'+':''}${wxAdj.toFixed(1)})。`;
   if(hPl.used||aPl.used){
     const seg=[];
     if(hPl.used)seg.push(`主隊打線對${aSt?.hand==='L'?'左':'右'}投${hPl.ratio>1?'較強':'偏弱'}(×${hPl.ratio.toFixed(2)})`);
@@ -1309,8 +1341,9 @@ async function loadDay(quiet){
     await resolveScoringNames(games).catch(()=>{});
     if(date===etToday()){
       await Promise.all(games.filter(g=>g.status!=='Final').map(async g=>{
-        const r=await fetchLineupRatio(g,ex);
+        const [r,wt]=await Promise.all([fetchLineupRatio(g,ex),fetchWxTemp(g.homeId,g.ts)]);
         if(r){g.luA=r.a;g.luH=r.h;}
+        if(Number.isFinite(wt))g.wxTemp=wt;
       }));
     }
     const lg=leagueRPG(pm);
