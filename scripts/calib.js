@@ -175,8 +175,26 @@ async function bpFatigue(date){
   return f;
 }
 
-/* ---------- 十層預測模型(與網頁版一致,回傳 pre-K 分差與期望分) ---------- */
-function predict(g,pm,lg,ps,ex){
+/* ⑪ 球隊偏差校正(與網頁版一致) */
+function computeTeamBias(ledger,K){
+  if(!ledger||ledger.length<150)return {};
+  const acc={};
+  ledger.forEach(x=>{
+    if(x.m==null||x.am==null)return;
+    const r=x.am-x.m*K;
+    (acc[x.hm]=acc[x.hm]||{s:0,n:0}).s+=r;acc[x.hm].n++;
+    (acc[x.aw]=acc[x.aw]||{s:0,n:0}).s-=r;acc[x.aw].n++;
+  });
+  const out={};
+  Object.entries(acc).forEach(([nm,a])=>{
+    if(a.n<20)return;
+    out[nm]=Math.max(-0.25,Math.min(0.25,(a.s/a.n)*a.n/(a.n+100)));
+  });
+  return out;
+}
+
+/* ---------- 預測模型(與網頁版一致,回傳 pre-K 分差與期望分) ---------- */
+function predict(g,pm,lg,ps,ex,teamBias){
   const H=pm[g.homeId]||{},A=pm[g.awayId]||{};
   if(!(lg&&H.rs!=null&&H.ra!=null&&H.gp&&A.rs!=null&&A.ra!=null&&A.gp))return null;
   const hRS=H.rs/H.gp,hRA=H.ra/H.gp,aRS=A.rs/A.gp,aRA=A.ra/A.gp;
@@ -237,6 +255,11 @@ function predict(g,pm,lg,ps,ex){
   if(bpA!=null)expHome+=bpA;
   const pf=PARK_F[g.homeId]||1;
   if(pf!==1){expHome*=pf;expAway*=pf;}
+  if(teamBias){
+    let b=(teamBias[g.home]||0)-(teamBias[g.away]||0);
+    b=Math.max(-0.4,Math.min(0.4,b));
+    expHome+=b/2;expAway-=b/2;
+  }
   return {mPre:expHome-expAway,expHome,expAway};
 }
 function classifyMiss(g,p,K,SIG){
@@ -267,6 +290,8 @@ function classifyMiss(g,p,K,SIG){
   let start=state.last?shiftDate(state.last,1):shiftDate(yesterday,-(BOOTSTRAP_DAYS-1));
   if(start>yesterday){console.log('無新日期需處理');}
   const ex=await fetchTeamExtras(season,yesterday);
+  const teamBias=computeTeamBias(state.ledger,state.k);
+  console.log('球隊偏差校正:',Object.keys(teamBias).length,'隊納入');
   const seen=new Set(state.ledger.map(x=>x.id));
   let dates=[];for(let d=start;d<=yesterday;d=shiftDate(d,1))dates.push(d);
   console.log(`處理 ${dates.length} 天:${start} → ${yesterday}`);
@@ -284,7 +309,7 @@ function classifyMiss(g,p,K,SIG){
         if(/postpon|suspend|cancel/i.test(g.detail||''))return;
         const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)return;
         if(seen.has(g.id))return;
-        const p=predict(g,pm,lg,ps,ex2);if(!p)return;
+        const p=predict(g,pm,lg,ps,ex2,teamBias);if(!p)return;
         const hit=((p.mPre>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
