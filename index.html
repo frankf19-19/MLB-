@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.11 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.12 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1815,7 +1815,7 @@ function playFeedHtml(allPlays){
   });
   return html+'</div>';
 }
-function pitTable(side,box,decisions){
+function pitBoxTable(side,box,decisions){
   const t=box.teams?.[side]; if(!t)return '';
   const ids=t.pitchers||[];
   if(!ids.length)return '';
@@ -1940,7 +1940,7 @@ async function loadGame(gid){
       </div>`:'';
     const playsHtml='';
     const dec=ld.decisions||{};
-    const boxes=boxTable('away',box)+pitTable('away',box,dec)+boxTable('home',box)+pitTable('home',box,dec);
+    const boxes=boxTable('away',box)+pitBoxTable('away',box,dec)+boxTable('home',box)+pitBoxTable('home',box,dec);
     $('gdTag').textContent=st==='Live'?'每 20 秒自動更新':'';
     $('gameDetail').innerHTML=`
       <div class="gd-score">
