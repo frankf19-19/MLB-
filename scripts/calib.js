@@ -175,6 +175,27 @@ async function bpFatigue(date){
   return f;
 }
 
+/* ⑭ 本季對戰(與網頁版一致;只算該場之前) */
+const h2hCache={};
+async function fetchH2H(g,season,cutoff){
+  const key=[g.awayId,g.homeId].sort().join('-')+cutoff;
+  if(h2hCache[key]!==undefined)return h2hCache[key];
+  try{
+    const d=await jget(`${API}/schedule?sportId=1&season=${season}&teamId=${g.homeId}&opponentId=${g.awayId}&fields=dates,date,games,gamePk,officialDate,status,abstractGameState,teams,away,home,team,id,isWinner`);
+    let hw=0,aw=0;
+    (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(gm=>{
+      if(gm.status?.abstractGameState!=='Final')return;
+      const gd=gm.officialDate||dt.date;
+      if(cutoff&&gd>=cutoff)return;
+      const ids=[gm.teams?.away?.team?.id,gm.teams?.home?.team?.id];
+      if(!ids.includes(g.awayId)||!ids.includes(g.homeId))return;
+      const winId=gm.teams?.home?.isWinner?gm.teams.home.team.id:(gm.teams?.away?.isWinner?gm.teams.away.team.id:null);
+      if(winId===g.homeId)hw++;else if(winId===g.awayId)aw++;
+    }));
+    h2hCache[key]={a:aw,h:hw};return h2hCache[key];
+  }catch(e){h2hCache[key]=null;return null;}
+}
+
 /* ⑬ 天氣層(與網頁版一致) */
 const PARK_GEO={144:[33.891,-84.468],110:[39.284,-76.622],111:[42.346,-71.097],
   112:[41.948,-87.655],145:[41.830,-87.634],113:[39.097,-84.507],114:[41.496,-81.685],
@@ -306,6 +327,12 @@ function predict(g,pm,lg,ps,ex,teamBias){
     const wxAdj=Math.max(-0.5,Math.min(0.5,0.023*(g.wxTemp-21)));
     expHome+=wxAdj/2;expAway+=wxAdj/2;
   }
+  if(g._h2h&&(g._h2h.a+g._h2h.h)>=4){
+    const n2=g._h2h.a+g._h2h.h;
+    const diff=(g._h2h.h-g._h2h.a)/n2;
+    const h2hAdj=Math.max(-0.25,Math.min(0.25,diff*(n2/(n2+12))*0.5));
+    expHome+=h2hAdj/2;expAway-=h2hAdj/2;
+  }
   if(teamBias){
     let b=(teamBias[g.home]||0)-(teamBias[g.away]||0);
     b=Math.max(-0.4,Math.min(0.4,b));
@@ -364,6 +391,8 @@ function classifyMiss(g,p,K,SIG){
         if(lu){g.luA=lu.a;g.luH=lu.h;}
         const wt=await fetchWxTemp(g.homeId,g.ts);
         if(Number.isFinite(wt))g.wxTemp=wt;
+        const hh=await fetchH2H(g,season,date);
+        if(hh)g._h2h=hh;
         const p=predict(g,pm,lg,ps,ex2,teamBias);if(!p)continue;
         const hit=((p.mPre>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
