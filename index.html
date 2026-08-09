@@ -522,6 +522,7 @@
             <option value="7">近 7 天</option>
             <option value="14" selected>近 14 天</option>
             <option value="30">近 30 天</option>
+            <option value="season">整季(讀雲端紀錄簿)</option>
           </select>
           <button class="today-btn" id="calibRun" style="color:var(--teal);border-color:rgba(78,202,193,.5)">開始體檢</button>
           <span class="tag" id="calibProg"></span>
@@ -593,7 +594,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.13 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.14 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1056,6 +1057,14 @@ function predict(g,pm,lg,ps,ex){
     wxAdj=Math.max(-0.5,Math.min(0.5,0.023*(g.wxTemp-21)));
     expHome+=wxAdj/2;expAway+=wxAdj/2;
   }
+  // ⑭ 本季對戰戰績(至少4場交手,重收縮,封頂±0.25)
+  let h2hAdj=0;
+  if(g._h2h&&(g._h2h.a+g._h2h.h)>=4){
+    const n2=g._h2h.a+g._h2h.h;
+    const diff=(g._h2h.h-g._h2h.a)/n2;
+    h2hAdj=Math.max(-0.25,Math.min(0.25,diff*(n2/(n2+12))*0.5));
+    expHome+=h2hAdj/2;expAway-=h2hAdj/2;
+  }
   // ⑪ 球隊偏差校正
   let biasAdj=0;
   if(_teamBias){
@@ -1093,6 +1102,7 @@ function predict(g,pm,lg,ps,ex){
   else if(luA>=1.015)luNotes.push(`客隊今日名單火力較強(×${luA.toFixed(2)})`);
   if(luNotes.length)why+=`當日打線:${luNotes.join('、')}。`;
   if(Math.abs(wxAdj)>=0.15)why+=`天氣:開賽氣溫約 ${g.wxTemp.toFixed(0)}°C,${wxAdj>0?'炎熱有利進攻':'低溫壓抑攻勢'}(總分 ${wxAdj>0?'+':''}${wxAdj.toFixed(1)})。`;
+  if(Math.abs(h2hAdj)>=0.10)why+=`本季對戰:${h2hAdj>0?'主':'客'}隊交手佔優(${g._h2h.a}–${g._h2h.h},客–主),已微調(${h2hAdj>0?'+':''}${h2hAdj.toFixed(2)})。`;
   if(hPl.used||aPl.used){
     const seg=[];
     if(hPl.used)seg.push(`主隊打線對${aSt?.hand==='L'?'左':'右'}投${hPl.ratio>1?'較強':'偏弱'}(×${hPl.ratio.toFixed(2)})`);
@@ -1346,6 +1356,7 @@ async function loadDay(quiet){
     const [pm,games,ex,fatMap]=await Promise.all([fetchStandingsAsOf(asOf),fetchGames(date),fetchTeamExtras(season,asOf),bpFatigue(date).catch(()=>({}))]);
     ex.fatigue=fatMap;
     await resolveScoringNames(games).catch(()=>{});
+    await fetchH2H(games,season,date).catch(()=>{});
     if(date===etToday()){
       await Promise.all(games.filter(g=>g.status!=='Final').map(async g=>{
         const [r,wt]=await Promise.all([fetchLineupRatio(g,ex),fetchWxTemp(g.homeId,g.ts)]);
@@ -1414,7 +1425,7 @@ async function loadDay(quiet){
       +(refreshTimer?' · 🔴 每 45 秒自動更新':'');
     bindTeamClicks();
     loadTransactions(date);
-    loadH2H(games,season);
+    fillH2H(games);
     updateFavToday(games,date);
     const summary=buildDailySummary(date,games,curPreds,reviews,{hits,errSum,errN});
     $('aiText').textContent=summary;
@@ -1647,24 +1658,32 @@ $('searchBox').addEventListener('input',()=>{
   },300);
 });
 /* ---------- 本季對戰戰績(即時統計) ---------- */
-async function loadH2H(games,season){
+async function fetchH2H(games,season,cutoff){
   const jobs=games.map(async g=>{
     try{
-      const d=await jget(`${API}/schedule?sportId=1&season=${season}&teamId=${g.homeId}&opponentId=${g.awayId}&fields=dates,games,gamePk,status,abstractGameState,teams,away,home,team,id,isWinner`);
+      const d=await jget(`${API}/schedule?sportId=1&season=${season}&teamId=${g.homeId}&opponentId=${g.awayId}&fields=dates,date,games,gamePk,officialDate,status,abstractGameState,teams,away,home,team,id,isWinner`);
       let hw=0,aw=0;
       (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(gm=>{
         if(gm.status?.abstractGameState!=='Final')return;
+        const gd=gm.officialDate||dt.date;
+        if(cutoff&&gd>=cutoff)return; // 只算該場之前的交手
         const ids=[gm.teams?.away?.team?.id,gm.teams?.home?.team?.id];
         if(!ids.includes(g.awayId)||!ids.includes(g.homeId))return;
         const winId=gm.teams?.home?.isWinner?gm.teams.home.team.id:(gm.teams?.away?.isWinner?gm.teams.away.team.id:null);
         if(winId===g.homeId)hw++;else if(winId===g.awayId)aw++;
       }));
-      const el=document.getElementById('h2h-'+g.id);
-      if(!el)return;
-      el.textContent=(hw+aw)?`本季對戰 ${aw}–${hw}(客–主)${hw>aw?' · 主隊佔優':aw>hw?' · 客隊佔優':' · 平手'}`:'本季首次交手';
+      g._h2h={a:aw,h:hw};
     }catch(e){}
   });
   await Promise.allSettled(jobs);
+}
+function fillH2H(games){
+  games.forEach(g=>{
+    const el=document.getElementById('h2h-'+g.id);
+    if(!el||!g._h2h)return;
+    const {a,h:hw}=g._h2h;
+    el.textContent=(hw+a)?`本季對戰 ${a}–${hw}(客–主)${hw>a?' · 主隊佔優':a>hw?' · 客隊佔優':' · 平手'}`:'本季首次交手';
+  });
 }
 
 /* ---------- 聯盟動態(官方異動 = 真實新聞,僅 MLB) ---------- */
@@ -2519,13 +2538,25 @@ async function autoCalibrate(){
 /* 手動完整報告 */
 $('calibRun').addEventListener('click',async()=>{
   if(calibRunning)return;calibRunning=true;
-  const days=+$('calibDays').value;
+  const rawSel=$('calibDays').value;
+  const seasonMode=rawSel==='season';
+  const days=seasonMode?9999:+rawSel;
   const prog=$('calibProg'),out=$('calibOut');
   out.innerHTML='';prog.textContent='準備中…';
   try{
-    const {samples,skipped}=await collectSamples(days,(i,n,c)=>{
-      prog.textContent=`回測中 ${i}/${n} 天…(已收 ${c} 場)`;});
-    prog.textContent='';
+    let samples,skipped=0;
+    if(seasonMode){
+      const L=ledger().filter(x=>x.m!=null&&x.am!=null);
+      if(L.length<50)throw new Error('紀錄簿樣本不足(需先讓雲端校準累積)');
+      samples=L.map(x=>({id:x.id,d:x.d,aw:x.aw,hm:x.hm,m:x.m,actM:x.am,
+        homeWon:(x.m>=0)===(x.hit===1),cat:x.cat||null}));
+      prog.textContent='';
+    }else{
+      const r=await collectSamples(days,(i,n,c)=>{
+        prog.textContent=`回測中 ${i}/${n} 天…(已收 ${c} 場)`;});
+      samples=r.samples;skipped=r.skipped;
+      prog.textContent='';
+    }
     if(samples.length<30){
       out.innerHTML=`<span style="color:var(--miss)">樣本只有 ${samples.length} 場,不足以校準(至少約 30 場)。請改跑更長天數。</span>`;
       calibRunning=false;return;
@@ -2582,7 +2613,7 @@ $('calibRun').addEventListener('click',async()=>{
       <div class="pos-group">勝率信心 vs 實際</div>
       <div class="table-wrap"><table class="stat" style="min-width:420px">
         <tr><th>模型信心</th><th>場數</th><th>平均信心</th><th>實際命中</th><th>偏差</th></tr>${rows}</table></div>
-      <div class="pos-group">未中歸因(近 ${days} 天,共 ${samples.filter(x=>x.cat).length} 場未中)</div>
+      <div class="pos-group">未中歸因(${seasonMode?"整季":"近 "+days+" 天"},共 ${samples.filter(x=>x.cat).length} 場未中)</div>
       ${(()=>{
         const misses=samples.filter(x=>x.cat);
         if(!misses.length)return '<div class="empty">此期間全數命中(或無未中樣本)。</div>';
