@@ -593,7 +593,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.12 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.13 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -828,54 +828,61 @@ async function fetchWxTemp(teamId,tsIso){
 
 /* 分差落點引擎:1分/2分/3+分機率(常態離散化 + 紀錄簿實測校正) */
 let _mgDist=null;
-function bandProbsRaw(mk,sd){
-  const F=v=>normCdf((v-mk)/sd);
-  const seg=(a,b)=>Math.max(0,(F(b)-F(a))+(F(-a)-F(-b)));
-  const p1=seg(0.5,1.5),p2=seg(1.5,2.5),p3=Math.max(0,1-F(2.5)+F(-2.5));
-  const t=p1+p2+p3;
-  return t>0?[p1/t,p2/t,p3/t]:[.30,.18,.52];
+/* 預測隊視角四帶位:爆冷敗 / 勝1分 / 勝2分 / 勝3+分 */
+function favBandRaw(mu,sd){
+  const F=v=>normCdf((v-mu)/sd);
+  let pL=Math.max(0,F(-0.5));           // 預測隊輸(任何分差)
+  let p1=Math.max(0,F(1.5)-F(0.5));     // 勝1分
+  let p2=Math.max(0,F(2.5)-F(1.5));     // 勝2分
+  let p3=Math.max(0,1-F(2.5));          // 勝3+分
+  const t=pL+p1+p2+p3;                  // 排除 ±0.5 間(棒球無和局)
+  return t>0?[pL/t,p1/t,p2/t,p3/t]:[.42,.15,.11,.32];
 }
+const favBandOf=fa=>fa<0?0:(fa===1?1:(fa===2?2:3));
+const FAV_BAND_ZH=['爆冷敗','勝1分','勝2分','勝3+分'];
 function computeMarginDist(){
   const L=ledger().filter(x=>x.m!=null&&x.am!=null);
   if(L.length<200){_mgDist=null;return;}
-  const res=L.map(x=>x.am-x.m*MARGIN_K);
+  // 殘差寬度(預測隊視角,含方向)
+  const res=L.map(x=>{const fa=x.m>=0?x.am:-x.am;return fa-Math.abs(x.m*MARGIN_K);});
   const sd=Math.sqrt(res.reduce((s,v)=>s+v*v,0)/L.length)||4.3;
-  // 依預測分差大小分三檔(條件式校正:五五波與大熱門的落點行為不同)
+  // 依預測分差大小分三檔,條件式校正
   const mks=L.map(x=>Math.abs(x.m*MARGIN_K)).sort((a,b)=>a-b);
   const b1=mks[Math.floor(mks.length/3)],b2=mks[Math.floor(mks.length*2/3)];
-  const terOf=mk=>Math.abs(mk)<=b1?0:(Math.abs(mk)<=b2?1:2);
-  const mkBand=am=>{const a=Math.abs(am);return a===1?0:(a===2?1:2);};
-  const emp=[[0,0,0],[0,0,0],[0,0,0]],th=[[0,0,0],[0,0,0],[0,0,0]],cnt=[0,0,0];
-  const gEmp=[0,0,0],gTh=[0,0,0];
+  const terOf=mk=>mk<=b1?0:(mk<=b2?1:2);
+  const emp=[[0,0,0,0],[0,0,0,0],[0,0,0,0]],th=[[0,0,0,0],[0,0,0,0],[0,0,0,0]],cnt=[0,0,0];
+  const gEmp=[0,0,0,0],gTh=[0,0,0,0];
   L.forEach(x=>{
-    const ter=terOf(x.m*MARGIN_K),bd=mkBand(x.am);
+    const mu=Math.abs(x.m*MARGIN_K),fa=x.m>=0?x.am:-x.am;
+    const ter=terOf(mu),bd=favBandOf(fa);
     emp[ter][bd]++;cnt[ter]++;gEmp[bd]++;
-    const p=bandProbsRaw(x.m*MARGIN_K,sd);
-    for(let k=0;k<3;k++){th[ter][k]+=p[k];gTh[k]+=p[k];}
+    const p=favBandRaw(mu,sd);
+    for(let k=0;k<4;k++){th[ter][k]+=p[k];gTh[k]+=p[k];}
   });
   const n=L.length;
-  const gCorr=[0,1,2].map(k=>gTh[k]>0?(gEmp[k]/n)/(gTh[k]/n):1);
+  const gCorr=[0,1,2,3].map(k=>gTh[k]>0?gEmp[k]/gTh[k]:1);
   const corr=[0,1,2].map(t2=>{
     if(cnt[t2]<60)return gCorr;
-    return [0,1,2].map(k=>th[t2][k]>0?(emp[t2][k]/cnt[t2])/(th[t2][k]/cnt[t2]):gCorr[k]);
+    return [0,1,2,3].map(k=>th[t2][k]>0?emp[t2][k]/th[t2][k]:gCorr[k]);
   });
-  _mgDist={sd,b1,b2,corr,gCorr,emp:{1:gEmp[0]/n,2:gEmp[1]/n,3:gEmp[2]/n}};
-  // 自我評估:校正後模型平均機率 vs 實際頻率、最看好帶位命中率
-  const avg=[0,0,0];let topHit=0;
+  _mgDist={sd,b1,b2,corr,gCorr,emp:gEmp.map(v=>v/n)};
+  // 自我評估
+  const avg=[0,0,0,0];let topHit=0;
   L.forEach(x=>{
-    const b=marginBands(x.m*MARGIN_K);if(!b)return;
-    for(let k=0;k<3;k++)avg[k]+=b[k];
-    const top=b.indexOf(Math.max(...b));
-    if(top===mkBand(x.am))topHit++;
+    const mu=Math.abs(x.m*MARGIN_K),fa=x.m>=0?x.am:-x.am;
+    const b=marginBands(mu);if(!b)return;
+    for(let k=0;k<4;k++)avg[k]+=b[k];
+    if(b.indexOf(Math.max(...b))===favBandOf(fa))topHit++;
   });
-  _mgDist.eval={avg:avg.map(v=>v/n),act:[gEmp[0]/n,gEmp[1]/n,gEmp[2]/n],topHit:topHit/n,n};
+  _mgDist.eval={avg:avg.map(v=>v/n),act:gEmp.map(v=>v/n),topHit:topHit/n,n};
 }
-function marginBands(mk){
-  if(!_mgDist||!Number.isFinite(mk))return null;
-  const ter=Math.abs(mk)<=_mgDist.b1?0:(Math.abs(mk)<=_mgDist.b2?1:2);
+function marginBands(mkAbs){
+  if(!_mgDist||!Number.isFinite(mkAbs))return null;
+  const mu=Math.abs(mkAbs);
+  const ter=mu<=_mgDist.b1?0:(mu<=_mgDist.b2?1:2);
   const c=_mgDist.corr[ter]||_mgDist.gCorr;
-  let p=bandProbsRaw(mk,_mgDist.sd).map((v,k)=>v*c[k]);
-  const t=p[0]+p[1]+p[2];if(!(t>0))return null;
+  let p=favBandRaw(mu,_mgDist.sd).map((v,k)=>v*c[k]);
+  const t=p[0]+p[1]+p[2]+p[3];if(!(t>0))return null;
   return p.map(v=>v/t);
 }
 
@@ -1128,13 +1135,13 @@ function classifyMiss(g,p){
   return 'edge';
 }
 function bandReview(p,actMargin){
-  const bp=marginBands((p.raw_margin||0)*MARGIN_K);
+  const bp=marginBands(Math.abs((p.raw_margin||0)*MARGIN_K));
   if(!bp)return '';
-  const aM=Math.abs(actMargin);
-  const lab=aM===1?'1分':(aM===2?'2分':'3+分');
-  const idx=aM===1?0:(aM===2?1:2);
+  const favAct=(p.raw_margin||0)>=0?actMargin:-actMargin;
+  const idx=favBandOf(favAct);
+  const lab=idx===0?`遭爆冷(輸 ${Math.abs(favAct)} 分)`:FAV_BAND_ZH[idx];
   const hitBand=bp.indexOf(Math.max(...bp))===idx;
-  return `分差落點:實際 ${lab}差,模型賽前給 1分${(bp[0]*100).toFixed(0)}%/2分${(bp[1]*100).toFixed(0)}%/3+${(bp[2]*100).toFixed(0)}%${hitBand?'(最看好帶位命中✓)':''}。`;
+  return `勝分差落點:預測隊實際${lab},模型賽前給 敗${(bp[0]*100).toFixed(0)}%/勝1分${(bp[1]*100).toFixed(0)}%/勝2分${(bp[2]*100).toFixed(0)}%/勝3+${(bp[3]*100).toFixed(0)}%${hitBand?'(最看好帶位命中✓)':''}。`;
 }
 function review(g,p){
   const actual=g.homeWin?g.home:(g.awayWin?g.away:null); if(!actual)return null;
@@ -1244,8 +1251,8 @@ function gameCard(g,p,rv){
     </div>`:'';
   const predLine=hasScore
     ?`<div class="meta scorepred">預期比分 <b>${p.exp_away!=null?p.exp_away.toFixed(1):p.away_score_pred}–${p.exp_home!=null?p.exp_home.toFixed(1):p.home_score_pred}</b>(客–主,約 ${p.away_score_pred}:${p.home_score_pred}) · 分差 <b>${r1(p.margin)}</b> · 總分期望 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b>${(()=>{
-      const b=marginBands(p.raw_margin!=null?p.raw_margin*MARGIN_K:null);
-      return b?` · 分差落點 1分 ${(b[0]*100).toFixed(0)}%·2分 ${(b[1]*100).toFixed(0)}%·3+分 ${(b[2]*100).toFixed(0)}%`:'';
+      const b=marginBands(p.raw_margin!=null?Math.abs(p.raw_margin*MARGIN_K):null);
+      return b?` · 預測隊落點 爆冷敗${(b[0]*100).toFixed(0)}%·勝1分${(b[1]*100).toFixed(0)}%·勝2分${(b[2]*100).toFixed(0)}%·勝3+${(b[3]*100).toFixed(0)}%`:'';
     })()} · 預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`
     :`<div class="meta scorepred">預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`;
   const gdayBtn=(isLive||isFinal)?`<button class="gday" data-gid="${g.id}">GAMEDAY ▶</button>`:'';
@@ -2570,7 +2577,7 @@ $('calibRun').addEventListener('click',async()=>{
         命中率 <b>${(hitRate*100).toFixed(1)}%</b>、分差平均誤差 <b>${mErr.toFixed(2)} 分</b>、
         分差命中率(±2分內)<b>${(marginHitOf(samples,2)*100).toFixed(1)}%</b>(±1分:${(marginHitOf(samples,1)*100).toFixed(0)}%、±3分:${(marginHitOf(samples,3)*100).toFixed(0)}%)、
         實際超出預測幅度比例 ${(coverRateOf(samples)*100).toFixed(0)}%(理想≈50%)、
-        ${_mgDist&&_mgDist.eval?`分差落點校準(${_mgDist.eval.n} 場):模型平均 1分${(_mgDist.eval.avg[0]*100).toFixed(0)}%/2分${(_mgDist.eval.avg[1]*100).toFixed(0)}%/3+${(_mgDist.eval.avg[2]*100).toFixed(0)}% vs 實際 ${(_mgDist.eval.act[0]*100).toFixed(0)}%/${(_mgDist.eval.act[1]*100).toFixed(0)}%/${(_mgDist.eval.act[2]*100).toFixed(0)}%、最看好帶位命中 ${(_mgDist.eval.topHit*100).toFixed(0)}%、`:''}
+        ${_mgDist&&_mgDist.eval?`勝分差落點校準(${_mgDist.eval.n} 場,預測隊視角):模型平均 敗${(_mgDist.eval.avg[0]*100).toFixed(0)}%/勝1 ${(_mgDist.eval.avg[1]*100).toFixed(0)}%/勝2 ${(_mgDist.eval.avg[2]*100).toFixed(0)}%/勝3+ ${(_mgDist.eval.avg[3]*100).toFixed(0)}% vs 實際 ${(_mgDist.eval.act[0]*100).toFixed(0)}%/${(_mgDist.eval.act[1]*100).toFixed(0)}%/${(_mgDist.eval.act[2]*100).toFixed(0)}%/${(_mgDist.eval.act[3]*100).toFixed(0)}%、最看好帶位命中 ${(_mgDist.eval.topHit*100).toFixed(0)}%、`:''}
         Brier ${curB.toFixed(4)} → ${bestB.toFixed(4)}。紀錄簿累計 ${total} 場。</div>
       <div class="pos-group">勝率信心 vs 實際</div>
       <div class="table-wrap"><table class="stat" style="min-width:420px">
