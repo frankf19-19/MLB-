@@ -488,6 +488,7 @@
       <button class="today-btn" id="todayBtn">今天</button>
       <button class="today-btn" id="calibBtn">模型體檢</button>
       <button class="today-btn" id="standBtn">戰績榜</button>
+      <button class="today-btn" id="statsBtn">數據榜</button>
       <button class="today-btn" id="honorBtn">榮譽殿堂</button>
       <button class="btn" id="loadBtn"><span class="ico">⟳</span><span>載入</span></button>
     </div>
@@ -573,6 +574,24 @@
     </section>
   </div>
 
+  <div id="statsView" class="hidden">
+    <section>
+      <div class="sec-head"><h2>數據榜</h2><span class="tag" id="stTag">官方即時數據</span>
+        <button class="back" id="stBackBtn">← 回比賽</button></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <select id="stScope" class="today-btn" style="padding:7px 10px">
+          <option value="player">球員</option><option value="team">球隊</option>
+        </select>
+        <select id="stGroup" class="today-btn" style="padding:7px 10px">
+          <option value="hitting">打擊</option><option value="pitching">投球</option>
+        </select>
+        <select id="stSort" class="today-btn" style="padding:7px 10px"></select>
+        <button class="btn" id="stGo">查詢</button>
+      </div>
+      <div id="stBody"><div class="empty">選擇條件後按「查詢」。</div></div>
+    </section>
+  </div>
+
   <div id="honorView" class="hidden">
     <section>
       <div class="sec-head"><h2>榮譽殿堂</h2><span class="tag" id="honorTag"></span>
@@ -594,7 +613,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.14 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.15 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2328,6 +2347,7 @@ function showView(v){
   $('gameView').classList.toggle('hidden',v!=='game');
   $('standView').classList.toggle('hidden',v!=='stand');
   $('honorView').classList.toggle('hidden',v!=='honor');
+  $('statsView').classList.toggle('hidden',v!=='stats');
   if(v!=='game')stopGameTimer();
 }
 $('backBtn').addEventListener('click',()=>history.back());
@@ -2959,6 +2979,70 @@ const savedTeam=localStorage.getItem('mlb_teamtheme');
 if(savedTeam&&TEAM_ID[+savedTeam])applyTeamTheme(+savedTeam);
 else applyTheme(fxTheme);
 
+/* ---------- 數據榜 ---------- */
+const ST_SORTS={
+  hitting:[['homeRuns','全壘打'],['battingAverage','打擊率'],['onBasePlusSlugging','OPS'],
+    ['rbi','打點'],['hits','安打'],['runs','得分'],['stolenBases','盜壘'],
+    ['onBasePercentage','上壘率'],['sluggingPercentage','長打率'],['doubles','二壘打'],['walks','保送']],
+  pitching:[['earnedRunAverage','ERA(低到高)'],['strikeouts','三振'],['wins','勝場'],
+    ['whip','WHIP(低到高)'],['saves','救援'],['inningsPitched','投球局數'],
+    ['strikeoutsPer9Inn','每9局三振'],['shutouts','完封']]
+};
+const ST_COLS={
+  hitting:[['gamesPlayed','G'],['atBats','AB'],['runs','R'],['hits','H'],['doubles','2B'],['triples','3B'],
+    ['homeRuns','HR'],['rbi','RBI'],['baseOnBalls','BB'],['strikeOuts','SO'],['stolenBases','SB'],
+    ['avg','AVG'],['obp','OBP'],['slg','SLG'],['ops','OPS']],
+  pitching:[['gamesPlayed','G'],['wins','W'],['losses','L'],['era','ERA'],['inningsPitched','IP'],
+    ['hits','H'],['earnedRuns','ER'],['baseOnBalls','BB'],['strikeOuts','SO'],['homeRuns','HR'],
+    ['whip','WHIP'],['saves','SV']]
+};
+function stFillSorts(){
+  const g=$('stGroup').value;
+  $('stSort').innerHTML=ST_SORTS[g].map(([v,n])=>`<option value="${v}">${n}</option>`).join('');
+}
+async function runStats(){
+  const scope=$('stScope').value,group=$('stGroup').value,sort=$('stSort').value;
+  const season=+etToday().slice(0,4);
+  $('stBody').innerHTML='<div class="empty">查詢中…</div>';
+  try{
+    const url=scope==='player'
+      ? `${API}/stats?stats=season&group=${group}&season=${season}&sportId=1&limit=50&sortStat=${sort}&playerPool=qualified`
+      : `${API}/teams/stats?stats=season&group=${group}&season=${season}&sportId=1&sortStat=${sort}`;
+    const d=await jget(url);
+    const splits=((d.stats||[])[0]?.splits)||[];
+    if(!splits.length){$('stBody').innerHTML='<div class="empty">查無資料(可能該排序尚未支援,換一個試試)。</div>';return;}
+    const cols=ST_COLS[group];
+    const rows=splits.slice(0,50).map((s,i)=>{
+      const st=s.stat||{};
+      const nm=scope==='player'
+        ? `<span class="pnm" data-pid="${s.player?.id}" style="cursor:pointer">${esc(s.player?.fullName||'')}</span>`
+        : `<span style="display:inline-flex;align-items:center;gap:7px">${s.team?.id?teamLogo(s.team.id,20):''}<span class="pnm" data-tid="${s.team?.id}" style="cursor:pointer">${esc(s.team?.name||'')}</span></span>`;
+      const tm=scope==='player'&&s.team?.id?`<td>${TEAM_ID[s.team.id]?.ab||''}</td>`:(scope==='player'?'<td></td>':'');
+      return `<tr><td>${i+1}</td><td style="text-align:left">${nm}</td>${tm}
+        ${cols.map(([k])=>`<td>${st[k]!=null?esc(String(st[k])):'-'}</td>`).join('')}</tr>`;
+    }).join('');
+    $('stBody').innerHTML=`<div class="table-wrap"><table class="stat" style="min-width:760px">
+      <tr><th>#</th><th style="text-align:left">${scope==='player'?'球員':'球隊'}</th>${scope==='player'?'<th>隊</th>':''}
+      ${cols.map(([,n])=>`<th>${n}</th>`).join('')}</tr>${rows}</table></div>`;
+    $('stTag').textContent=`${season} 球季 · ${scope==='player'?'球員':'球隊'} · ${group==='hitting'?'打擊':'投球'} · 前 ${Math.min(50,splits.length)} 名`;
+    bindPlayerClicks($('stBody'));
+    $('stBody').querySelectorAll('.pnm[data-tid]').forEach(el=>{
+      el.addEventListener('click',()=>showTeam(+el.dataset.tid,el.textContent));});
+  }catch(e){
+    $('stBody').innerHTML=`<div class="empty">載入失敗:${esc(e.message)}</div>`;
+  }
+}
+function showStats(fromPop){
+  if(!fromPop)history.pushState({v:'stats'},'');
+  showView('stats');
+  if(!$('stSort').options.length){stFillSorts();runStats();}
+}
+$('statsBtn').addEventListener('click',()=>showStats());
+$('stBackBtn').addEventListener('click',()=>history.back());
+$('stGroup').addEventListener('change',()=>{stFillSorts();runStats();});
+$('stScope').addEventListener('change',()=>runStats());
+$('stGo').addEventListener('click',()=>runStats());
+
 /* ---------- 榮譽殿堂:歷年冠軍與大獎 ---------- */
 let hnYearCur=null,awardIdsCache=null;
 async function ensureAwardIds(){
@@ -3196,6 +3280,7 @@ addEventListener('popstate',e=>{
   else if(s.v==='game')showGame(s.id,true);
   else if(s.v==='stand')showStandings(true);
   else if(s.v==='honor')showHonors(true);
+  else if(s.v==='stats')showStats(true);
   else showView('home');
 });
 history.replaceState({v:'home'},'');
