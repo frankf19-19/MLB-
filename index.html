@@ -438,6 +438,12 @@
   .stat{min-width:auto;padding:9px 16px;border-radius:12px}
   .stat .num{font-size:22px}
   .stat .lbl{font-size:10.5px}
+  th.sortable{cursor:pointer;user-select:none;transition:color .15s}
+  th.sortable:hover{color:var(--amber)}
+  th.sortable.on{color:var(--amber);font-weight:800}
+  #stBody .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  #stBody table.stat{min-width:900px}
+  #stBody table.stat th,#stBody table.stat td{white-space:nowrap;padding-left:9px;padding-right:9px}
   .fav-star{position:absolute;top:10px;right:12px;width:34px;height:34px;border-radius:50%;
     border:1px solid var(--line);background:var(--wash);color:var(--muted);font-size:17px;
     cursor:pointer;line-height:1;transition:transform .15s,color .15s,background .15s;z-index:2}
@@ -619,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.17 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.18 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -3005,6 +3011,15 @@ const ST_COLS={
 const ST_POS=[['','全部位置'],['P','投手 P'],['C','捕手 C'],['1B','一壘 1B'],['2B','二壘 2B'],
   ['3B','三壘 3B'],['SS','游擊 SS'],['LF','左外野 LF'],['CF','中外野 CF'],['RF','右外野 RF'],
   ['OF','外野 OF'],['DH','指定打擊 DH'],['IF','內野 IF']];
+const ST_COL2SORT={
+  hitting:{homeRuns:'homeRuns',avg:'battingAverage',ops:'onBasePlusSlugging',rbi:'rbi',hits:'hits',
+    runs:'runs',stolenBases:'stolenBases',obp:'onBasePercentage',slg:'sluggingPercentage',
+    doubles:'doubles',triples:'triples',baseOnBalls:'walks',strikeOuts:'strikeOuts',
+    atBats:'atBats',gamesPlayed:'gamesPlayed'},
+  pitching:{era:'earnedRunAverage',strikeOuts:'strikeouts',wins:'wins',losses:'losses',
+    whip:'whip',saves:'saves',inningsPitched:'inningsPitched',gamesPlayed:'gamesPlayed',
+    homeRuns:'homeRuns',baseOnBalls:'walks',hits:'hits',earnedRuns:'earnedRuns'}
+};
 function stFillStatic(){
   const now=+etToday().slice(0,4);
   $('stSeason').innerHTML=Array.from({length:26},(_,i)=>now-i)
@@ -3055,13 +3070,23 @@ async function runStats(more){
       return `<tr><td>${i+1}</td><td style="text-align:left">${nm}</td>${tm}
         ${cols.map(([k])=>`<td>${st[k]!=null?esc(String(st[k])):'-'}</td>`).join('')}</tr>`;
     }).join('');
-    $('stBody').innerHTML=`<div class="table-wrap"><table class="stat" style="min-width:760px">
+    $('stBody').innerHTML=`<div class="table-wrap"><table class="stat">
       <tr><th>#</th><th style="text-align:left">${scope==='player'?'球員':'球隊'}</th>${scope==='player'?'<th>隊</th>':''}
-      ${cols.map(([,n])=>`<th>${n}</th>`).join('')}</tr>${rows}</table></div>
+      ${cols.map(([k,n])=>{
+        const sk=(ST_COL2SORT[group]||{})[k];
+        return sk?`<th class="sortable${sk===sort?' on':''}" data-sk="${sk}" title="點擊依此排序">${n}${sk===sort?' ▾':''}</th>`:`<th>${n}</th>`;
+      }).join('')}</tr>${rows}</table></div>
       ${_stDone?`<div class="tag" style="margin-top:10px">已顯示全部 ${_stRows.length} 筆。</div>`
         :`<div style="margin-top:12px;text-align:center"><button class="today-btn" id="stMore">載入更多(已載入 ${_stRows.length} 筆)</button></div>`}`;
     const mb=$('stMore');
     if(mb)mb.addEventListener('click',()=>runStats(true));
+    $('stBody').querySelectorAll('th.sortable').forEach(th=>th.addEventListener('click',()=>{
+      const sk=th.dataset.sk;
+      const sel=$('stSort');
+      if([...sel.options].some(o=>o.value===sk))sel.value=sk;
+      else{const o=document.createElement('option');o.value=sk;o.textContent=th.textContent.replace(' ▾','');sel.appendChild(o);sel.value=sk;}
+      runStats();
+    }));
     const fl=[`${season} 球季`,scope==='player'?'球員':'球隊',group==='hitting'?'打擊':'投球'];
     if(scope==='player'){
       if(teamId&&TEAM_ID[teamId])fl.push(TEAM_ID[teamId].ab);
