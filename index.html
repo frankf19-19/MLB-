@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.18 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.19 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2641,6 +2641,28 @@ $('calibRun').addEventListener('click',async()=>{
         分差命中率(±2分內)<b>${(marginHitOf(samples,2)*100).toFixed(1)}%</b>(±1分:${(marginHitOf(samples,1)*100).toFixed(0)}%、±3分:${(marginHitOf(samples,3)*100).toFixed(0)}%)、
         實際超出預測幅度比例 ${(coverRateOf(samples)*100).toFixed(0)}%(理想≈50%)、
         ${_mgDist&&_mgDist.eval?`勝分差落點校準(${_mgDist.eval.n} 場,預測隊視角):模型平均 敗${(_mgDist.eval.avg[0]*100).toFixed(0)}%/勝1 ${(_mgDist.eval.avg[1]*100).toFixed(0)}%/勝2 ${(_mgDist.eval.avg[2]*100).toFixed(0)}%/勝3+ ${(_mgDist.eval.avg[3]*100).toFixed(0)}% vs 實際 ${(_mgDist.eval.act[0]*100).toFixed(0)}%/${(_mgDist.eval.act[1]*100).toFixed(0)}%/${(_mgDist.eval.act[2]*100).toFixed(0)}%/${(_mgDist.eval.act[3]*100).toFixed(0)}%、最看好帶位命中 ${(_mgDist.eval.topHit*100).toFixed(0)}%、`:''}
+        ${(()=>{
+          const S=samples.filter(x=>x.m!=null&&x.actM!=null);
+          if(S.length<50)return '';
+          const mk=S.map(x=>x.m*MARGIN_K),am=S.map(x=>x.actM);
+          const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+          const mm=mean(mk),ma=mean(am);
+          const sdOf=a=>{const m2=mean(a);return Math.sqrt(mean(a.map(v=>(v-m2)*(v-m2))));};
+          const sdM=sdOf(mk),sdA=sdOf(am);
+          let cov=0;for(let i=0;i<S.length;i++)cov+=(mk[i]-mm)*(am[i]-ma);cov/=S.length;
+          const r=(sdM>0&&sdA>0)?cov/(sdM*sdA):0;
+          const near=S.filter(x=>Math.abs(x.m*MARGIN_K)<1).length/S.length;
+          const one=S.filter(x=>Math.abs(x.actM)===1).length/S.length;
+          const big=S.filter(x=>Math.abs(x.m*MARGIN_K)>=2).length/S.length;
+          let vd;
+          if(r>=0.10)vd='判別力正常(r≥0.10 為 MLB 合理水準),分差幅度由 K 自動校準,無需人工放大。';
+          else if(r>=0.05)vd='判別力偏弱但仍為正,建議續觀察;放大幅度只會惡化誤差,不建議。';
+          else vd='判別力接近零,代表分差訊號不足——此時該做的是強化資料層,而非放大幅度。';
+          return `<div style="margin-top:8px">預測判別力:預測分差標準差 <b>${sdM.toFixed(2)}</b> 分(實際分差標準差 ${sdA.toFixed(2)})、
+            預測與實際相關 <b>r=${r.toFixed(3)}</b>(MLB 合理區間 0.10~0.25)、
+            預測分差&lt;1 分者佔 ${(near*100).toFixed(0)}%、≥2 分者佔 ${(big*100).toFixed(0)}%、
+            實際一分差比例 ${(one*100).toFixed(0)}%(MLB 常態約 29%)。<br>${vd}</div>`;
+        })()}
         Brier ${curB.toFixed(4)} → ${bestB.toFixed(4)}。紀錄簿累計 ${total} 場。</div>
       <div class="pos-group">勝率信心 vs 實際</div>
       <div class="table-wrap"><table class="stat" style="min-width:420px">
