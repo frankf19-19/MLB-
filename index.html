@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.19 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.20 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2695,7 +2695,8 @@ $('calibRun').addEventListener('click',async()=>{
         <tr><th>預測分差</th><th>場數</th><th>隱含勝率</th><th>實際勝率</th><th>預測均差</th><th>實際均差</th></tr>${mrows}</table></div>
       <div style="margin-top:10px">${verdict}</div>
       <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
-        ${changes.length?`<button class="today-btn" id="calibApply" style="color:var(--amber);border-color:rgba(255,194,71,.5)">套用建議</button>`:''}
+        ${(changes.length&&!seasonMode)?`<button class="today-btn" id="calibApply" style="color:var(--amber);border-color:rgba(255,194,71,.5)">套用建議</button>`:''}
+        ${seasonMode?`<span class="tag" style="align-self:center">整季報告僅供評估:整季樣本含早期舊版模型的預測,不應用於調參;參數由雲端每日以近 60 天自動校準。</span>`:''}
         ${(Math.abs(RUN_SIGMA-4.3)>0.01||Math.abs(MARGIN_K-1)>0.005)?`<button class="today-btn" id="calibReset">還原預設</button>`:''}
       </div>
       <div class="tag" style="margin-top:8px">K=分差係數(校正比分刻度)、σ=勝率鈍感度(校正信心刻度);每天首開自動校準並套用。「實際均差」為實際分差在預測方向上的平均——與「預測均差」越接近,比分越可信。</div>`;
