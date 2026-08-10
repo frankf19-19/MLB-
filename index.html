@@ -586,6 +586,12 @@
           <option value="hitting">打擊</option><option value="pitching">投球</option>
         </select>
         <select id="stSort" class="today-btn" style="padding:7px 10px"></select>
+        <select id="stSeason" class="today-btn" style="padding:7px 10px"></select>
+        <select id="stTeam" class="today-btn" style="padding:7px 10px"><option value="">全部球隊</option></select>
+        <select id="stPos" class="today-btn" style="padding:7px 10px"></select>
+        <select id="stPool" class="today-btn" style="padding:7px 10px">
+          <option value="qualified">合格球員</option><option value="all">全部球員</option>
+        </select>
         <button class="btn" id="stGo">查詢</button>
       </div>
       <div id="stBody"><div class="empty">選擇條件後按「查詢」。</div></div>
@@ -613,7 +619,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.15 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.17 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2996,23 +3002,51 @@ const ST_COLS={
     ['hits','H'],['earnedRuns','ER'],['baseOnBalls','BB'],['strikeOuts','SO'],['homeRuns','HR'],
     ['whip','WHIP'],['saves','SV']]
 };
+const ST_POS=[['','全部位置'],['P','投手 P'],['C','捕手 C'],['1B','一壘 1B'],['2B','二壘 2B'],
+  ['3B','三壘 3B'],['SS','游擊 SS'],['LF','左外野 LF'],['CF','中外野 CF'],['RF','右外野 RF'],
+  ['OF','外野 OF'],['DH','指定打擊 DH'],['IF','內野 IF']];
+function stFillStatic(){
+  const now=+etToday().slice(0,4);
+  $('stSeason').innerHTML=Array.from({length:26},(_,i)=>now-i)
+    .map(y=>`<option value="${y}">${y} 球季</option>`).join('');
+  $('stPos').innerHTML=ST_POS.map(([v,n])=>`<option value="${v}">${n}</option>`).join('');
+  const opts=Object.entries(TEAM_NAMES).sort((a,b)=>TEAM_ID[a[0]].ab.localeCompare(TEAM_ID[b[0]].ab));
+  $('stTeam').innerHTML='<option value="">全部球隊</option>'+
+    opts.map(([id,nm])=>`<option value="${id}">${TEAM_ID[id].ab} ${esc(nm)}</option>`).join('');
+}
 function stFillSorts(){
   const g=$('stGroup').value;
   $('stSort').innerHTML=ST_SORTS[g].map(([v,n])=>`<option value="${v}">${n}</option>`).join('');
 }
-async function runStats(){
+let _stRows=[],_stOffset=0,_stDone=false,_stLoading=false;
+async function runStats(more){
+  if(_stLoading)return;
+  if(!more){_stRows=[];_stOffset=0;_stDone=false;}
+  if(_stDone)return;
+  _stLoading=true;
   const scope=$('stScope').value,group=$('stGroup').value,sort=$('stSort').value;
-  const season=+etToday().slice(0,4);
-  $('stBody').innerHTML='<div class="empty">查詢中…</div>';
+  const season=+$('stSeason').value||+etToday().slice(0,4);
+  const teamId=$('stTeam').value,pos=$('stPos').value,pool=$('stPool').value;
+  if(!more)$('stBody').innerHTML='<div class="empty">查詢中…</div>';
+  else{const b=$('stMore');if(b)b.textContent='載入中…';}
   try{
+    const q=[`stats=season`,`group=${group}`,`season=${season}`,`sportId=1`,`sortStat=${sort}`];
+    if(scope==='player'){
+      q.push(`limit=100`,`offset=${_stOffset}`,`playerPool=${pool}`);
+      if(teamId)q.push(`teamId=${teamId}`);
+      if(pos)q.push(`group=${group}`,`position=${pos}`);
+    }
     const url=scope==='player'
-      ? `${API}/stats?stats=season&group=${group}&season=${season}&sportId=1&limit=50&sortStat=${sort}&playerPool=qualified`
+      ? `${API}/stats?${q.join('&')}`
       : `${API}/teams/stats?stats=season&group=${group}&season=${season}&sportId=1&sortStat=${sort}`;
     const d=await jget(url);
     const splits=((d.stats||[])[0]?.splits)||[];
-    if(!splits.length){$('stBody').innerHTML='<div class="empty">查無資料(可能該排序尚未支援,換一個試試)。</div>';return;}
+    if(!splits.length&&!_stRows.length){$('stBody').innerHTML='<div class="empty">查無資料(可能該排序尚未支援,換一個試試)。</div>';_stLoading=false;return;}
+    if(splits.length<100||scope==='team')_stDone=true;
+    _stRows=_stRows.concat(splits);
+    _stOffset=_stRows.length;
     const cols=ST_COLS[group];
-    const rows=splits.slice(0,50).map((s,i)=>{
+    const rows=_stRows.map((s,i)=>{
       const st=s.stat||{};
       const nm=scope==='player'
         ? `<span class="pnm" data-pid="${s.player?.id}" style="cursor:pointer">${esc(s.player?.fullName||'')}</span>`
@@ -3023,24 +3057,45 @@ async function runStats(){
     }).join('');
     $('stBody').innerHTML=`<div class="table-wrap"><table class="stat" style="min-width:760px">
       <tr><th>#</th><th style="text-align:left">${scope==='player'?'球員':'球隊'}</th>${scope==='player'?'<th>隊</th>':''}
-      ${cols.map(([,n])=>`<th>${n}</th>`).join('')}</tr>${rows}</table></div>`;
-    $('stTag').textContent=`${season} 球季 · ${scope==='player'?'球員':'球隊'} · ${group==='hitting'?'打擊':'投球'} · 前 ${Math.min(50,splits.length)} 名`;
+      ${cols.map(([,n])=>`<th>${n}</th>`).join('')}</tr>${rows}</table></div>
+      ${_stDone?`<div class="tag" style="margin-top:10px">已顯示全部 ${_stRows.length} 筆。</div>`
+        :`<div style="margin-top:12px;text-align:center"><button class="today-btn" id="stMore">載入更多(已載入 ${_stRows.length} 筆)</button></div>`}`;
+    const mb=$('stMore');
+    if(mb)mb.addEventListener('click',()=>runStats(true));
+    const fl=[`${season} 球季`,scope==='player'?'球員':'球隊',group==='hitting'?'打擊':'投球'];
+    if(scope==='player'){
+      if(teamId&&TEAM_ID[teamId])fl.push(TEAM_ID[teamId].ab);
+      if(pos)fl.push((ST_POS.find(p=>p[0]===pos)||[,pos])[1]);
+      fl.push(pool==='all'?'全部球員':'合格球員');
+    }
+    fl.push(`已載入 ${_stRows.length} 筆${_stDone?'(全部)':''}`);
+    $('stTag').textContent=fl.join(' · ');
     bindPlayerClicks($('stBody'));
     $('stBody').querySelectorAll('.pnm[data-tid]').forEach(el=>{
       el.addEventListener('click',()=>showTeam(+el.dataset.tid,el.textContent));});
   }catch(e){
-    $('stBody').innerHTML=`<div class="empty">載入失敗:${esc(e.message)}</div>`;
+    if(!_stRows.length)$('stBody').innerHTML=`<div class="empty">載入失敗:${esc(e.message)}</div>`;
+    else{const b=$('stMore');if(b)b.textContent='載入失敗,再試一次';}
   }
+  _stLoading=false;
 }
 function showStats(fromPop){
   if(!fromPop)history.pushState({v:'stats'},'');
   showView('stats');
-  if(!$('stSort').options.length){stFillSorts();runStats();}
+  if(!$('stSort').options.length){stFillStatic();stFillSorts();stToggleFilters();runStats();}
 }
 $('statsBtn').addEventListener('click',()=>showStats());
 $('stBackBtn').addEventListener('click',()=>history.back());
 $('stGroup').addEventListener('change',()=>{stFillSorts();runStats();});
-$('stScope').addEventListener('change',()=>runStats());
+function stToggleFilters(){
+  const isP=$('stScope').value==='player';
+  ['stTeam','stPos','stPool'].forEach(id=>{$(id).style.display=isP?'':'none';});
+}
+$('stScope').addEventListener('change',()=>{stToggleFilters();runStats();});
+$('stSeason').addEventListener('change',()=>runStats());
+$('stTeam').addEventListener('change',()=>runStats());
+$('stPos').addEventListener('change',()=>runStats());
+$('stPool').addEventListener('change',()=>runStats());
 $('stGo').addEventListener('click',()=>runStats());
 
 /* ---------- 榮譽殿堂:歷年冠軍與大獎 ---------- */
