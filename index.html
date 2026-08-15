@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.20 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.23 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -946,20 +946,27 @@ const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.06,Ma
 /* ⑪ 球隊偏差校正:從紀錄簿殘差學習(收縮 n/(n+100),封頂±0.25) */
 let _teamBias=null;
 function computeTeamBias(){
-  const L=ledger();
-  if(!L||L.length<150){_teamBias={};return;}
-  const acc={};
+  const L=ledger().filter(x=>x.m!=null&&x.am!=null);
+  if(L.length<150){_teamBias={};return;}
+  const ds=[...new Set(L.map(x=>x.d))].sort();
+  const cut=ds[Math.max(0,ds.length-30)];
+  const accS={},accR={};
   L.forEach(x=>{
-    if(x.m==null||x.am==null)return;
     const r=x.am-x.m*MARGIN_K;
-    (acc[x.hm]=acc[x.hm]||{s:0,n:0}).s+=r;acc[x.hm].n++;
-    (acc[x.aw]=acc[x.aw]||{s:0,n:0}).s-=r;acc[x.aw].n++;
+    (accS[x.hm]=accS[x.hm]||{s:0,n:0}).s+=r;accS[x.hm].n++;
+    (accS[x.aw]=accS[x.aw]||{s:0,n:0}).s-=r;accS[x.aw].n++;
+    if(x.d>=cut){
+      (accR[x.hm]=accR[x.hm]||{s:0,n:0}).s+=r;accR[x.hm].n++;
+      (accR[x.aw]=accR[x.aw]||{s:0,n:0}).s-=r;accR[x.aw].n++;
+    }
   });
   _teamBias={};
-  Object.entries(acc).forEach(([nm,a])=>{
-    if(a.n<20)return;
-    const raw=a.s/a.n;
-    _teamBias[nm]=Math.max(-0.25,Math.min(0.25,raw*a.n/(a.n+100)));
+  Object.keys(accS).forEach(nm=>{
+    const S=accS[nm];if(S.n<20)return;
+    const bS=(S.s/S.n)*S.n/(S.n+100);          // 整季基底(重收縮)
+    const R=accR[nm];
+    const bR=(R&&R.n>=10)?(R.s/R.n)*R.n/(R.n+40):bS; // 近30天劇變(中收縮)
+    _teamBias[nm]=Math.max(-0.35,Math.min(0.35,bS*0.4+bR*0.6));
   });
 }
 
@@ -1100,7 +1107,7 @@ function predict(g,pm,lg,ps,ex){
   let biasAdj=0;
   if(_teamBias){
     biasAdj=(_teamBias[g.home]||0)-(_teamBias[g.away]||0);
-    biasAdj=Math.max(-0.4,Math.min(0.4,biasAdj));
+    biasAdj=Math.max(-0.55,Math.min(0.55,biasAdj));
     if(biasAdj>0)expHome+=biasAdj/2,expAway-=biasAdj/2;
     else if(biasAdj<0)expHome+=biasAdj/2,expAway-=biasAdj/2;
   }
@@ -1403,7 +1410,7 @@ async function loadDay(quiet){
     games.sort((a,b)=>wgt(a)-wgt(b));
     let hits=0,finals=0,errSum=0,errN=0,html='';
     const reviews=[];curGames=games;curPreds=[];
-    const focusArr=[];
+    const focusArr=[];let blowouts=0,mb1=0,mb2=0,mb3=0,bandN=0,bandHits=0;
     games.forEach(g=>{
       const A=pm[g.awayId],H=pm[g.homeId];
       g.awayRec=A?`${A.w}-${A.l}`:''; g.homeRec=H?`${H.w}-${H.l}`:'';
@@ -1412,7 +1419,18 @@ async function loadDay(quiet){
       const isSpecial=/postpon|suspend|cancel/i.test(g.detail||'');
       const rv=(g.status==='Final'&&!isSpecial)?review(g,p):null;
       if(rv){rv.g=g;finals++;if(rv.hit)hits++;
-        if(p.raw_margin!=null){errSum+=Math.abs(rv.actMargin-p.raw_margin);errN++;}}
+        const aM=Math.abs(rv.actMargin);
+        if(aM===1)mb1++;else if(aM===2)mb2++;else mb3++;
+        if(aM>=5)blowouts++;
+        if(p&&p.raw_margin!=null){
+          const bp=marginBands(Math.abs(p.raw_margin*MARGIN_K));
+          if(bp){
+            bandN++;
+            const favAct=p.raw_margin>=0?rv.actMargin:-rv.actMargin;
+            if(bp.indexOf(Math.max(...bp))===favBandOf(favAct))bandHits++;
+          }
+          errSum+=Math.abs(rv.actMargin-p.raw_margin);errN++;
+        }}
       reviews.push(rv);html+=gameCard(g,p,rv);
       if(p&&p.home_prob!=null&&g.status!=='Final'&&!isSpecial){
         const conf=Math.max(p.home_prob,1-p.home_prob);
@@ -1452,7 +1470,8 @@ async function loadDay(quiet){
         if(!$('homeView').classList.contains('hidden'))loadDay(true);
       },45000);
     }
-    st.textContent=(finals?`完成 · ${finals} 場已完賽已比對`:'完成 · 該日尚無完賽結果')
+    const bandNote=finals?` · 分差分布 1分${mb1}·2分${mb2}·3+${mb3}${blowouts?`(含5+大勝差 ${blowouts})`:''}${bandN?` · 帶位預測命中 ${bandHits}/${bandN}`:''}`:'';
+    st.textContent=(finals?`完成 · ${finals} 場已完賽已比對${bandNote}`:'完成 · 該日尚無完賽結果')
       +(refreshTimer?' · 🔴 每 45 秒自動更新':'');
     bindTeamClicks();
     loadTransactions(date);
