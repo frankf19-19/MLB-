@@ -463,11 +463,12 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     b=Math.max(-0.55,Math.min(0.55,b));
     expHome+=b/2;expAway-=b/2;
   }
-  return {mPre:expHome-expAway,expHome,expAway};
+  return {mPre:expHome-expAway,expHome,expAway,tot:expHome+expAway};
 }
+const sigScaleOf=t=>Math.max(.90,Math.min(1.10,Math.pow((t||8.6)/8.6,0.35)));
 function classifyMiss(g,p,K,SIG){
   const favHome=(p.mPre||0)>=0;
-  const prob=Math.max(.05,Math.min(.95,normCdf(p.mPre*K/SIG)));
+  const prob=Math.max(.05,Math.min(.95,normCdf(p.mPre*K/(SIG*sigScaleOf(p.tot)))));
   const conf=Math.max(prob,1-prob);
   const hR=g.homeScore??0,aR=g.awayScore??0;
   const mid=(p.expHome+p.expAway)/2,half=p.mPre/2*K;
@@ -541,6 +542,7 @@ function classifyMiss(g,p,K,SIG){
         const hit=((p.mPre>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
+          t:+p.tot.toFixed(1),
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
         seen.add(g.id);added++;
       }
@@ -560,7 +562,7 @@ function classifyMiss(g,p,K,SIG){
       state.k=Math.max(0.7,Math.min(1.4,Math.round((state.k+(raw-state.k)*0.5)*100)/100));
     }
     const brier=(s,k)=>sub.reduce((t,x)=>{
-      const p=Math.max(.05,Math.min(.95,normCdf(x.m*k/s)));
+      const p=Math.max(.05,Math.min(.95,normCdf(x.m*k/(s*sigScaleOf(x.t)))));
       const won=(x.m>=0)?(x.hit===1):(x.hit===0); // hit=看好方是否贏;主隊視角:
       const homeWon=(x.m>=0)===(x.hit===1);
       return t+Math.pow(p-(homeWon?1:0),2);},0)/sub.length;
