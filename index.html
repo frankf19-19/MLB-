@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.35 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.36 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1474,7 +1474,17 @@ function gameCard(g,p,rv){
       const phi=Math.exp(-a*a/2)/Math.sqrt(2*Math.PI);
       const tail=1-normCdf(a);
       const ew=tail>0.02?mu+sd*phi/tail:mu;
-      return ` · 若勝出平均贏 <b>${ew.toFixed(1)}</b> 分`;
+      // 大膽劇本:勝出情境的中位勝分(該場分布反查),開成整數比分
+      const F0=normCdf((0.5-mu)/sd);
+      const target=(F0+1)/2;
+      let lo2=0.5,hi2=14;
+      for(let i=0;i<28;i++){const mid2=(lo2+hi2)/2;
+        (normCdf((mid2-mu)/sd)<target)?(lo2=mid2):(hi2=mid2);}
+      const mm=Math.max(1,Math.round((lo2+hi2)/2));
+      const tot=(p.exp_home??0)+(p.exp_away??0);
+      const w=Math.round((tot+mm)/2),l=Math.max(0,w-mm);
+      const bold=(p.raw_margin||0)>=0?`${l}:${w}`:`${w}:${l}`;
+      return ` · 若勝出平均贏 <b>${ew.toFixed(1)}</b> 分 · 大膽劇本 <b>${bold}</b>`;
     })()} · 分差 <b>${r1(p.margin)}</b> · 總分期望 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b>${(()=>{
       const b=marginBands(p.raw_margin!=null?Math.abs(p.raw_margin*MARGIN_K):null,p.sig_scale);
       return b?` · 預測隊落點 爆冷敗${(b[0]*100).toFixed(0)}%·勝1分${(b[1]*100).toFixed(0)}%·勝2分${(b[2]*100).toFixed(0)}%·勝3+${(b[3]*100).toFixed(0)}%`:'';
