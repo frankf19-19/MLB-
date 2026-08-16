@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.28 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.29 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -927,13 +927,39 @@ async function fetchLineupRatio(g,ex){
   if(lineupCache[g.id]!==undefined)return lineupCache[g.id];
   try{
     const box=await jget(`${API}/game/${g.id}/boxscore`);
-    const calc=side=>{
+    const orders={};
+    ['away','home'].forEach(side=>{
       const t=box.teams?.[side];const order=t?.battingOrder||[];
-      if(order.length<9)return null;
-      const arr=order.slice(0,9).map(id=>parseFloat(t.players?.['ID'+id]?.seasonStats?.batting?.ops))
-        .filter(v=>isFinite(v)&&v>0);
+      if(order.length>=9)orders[side]=order.slice(0,9).map(id=>({id,
+        sOPS:parseFloat(t.players?.['ID'+id]?.seasonStats?.batting?.ops)}));
+    });
+    // 冷熱狀態:一次批量抓 18 人近14天 OPS(截止=昨天,不含當日)
+    const allIds=[...(orders.away||[]),...(orders.home||[])].map(o=>o.id);
+    const recMap={};
+    if(allIds.length){
+      try{
+        const end=shiftDate(etToday(),-1),start=shiftDate(end,-13),yr=end.slice(0,4);
+        const d=await jget(`${API}/people?personIds=${allIds.join(',')}&hydrate=stats(group=[hitting],type=[byDateRange],startDate=${start},endDate=${end},season=${yr})`);
+        (d.people||[]).forEach(p=>{
+          const sp=(p.stats||[]).find(s=>s.group?.displayName==='hitting')?.splits||[];
+          if(!sp.length)return;
+          const st=sp[sp.length-1].stat||{};
+          const ops=parseFloat(st.ops),ab=parseInt(st.atBats);
+          if(isFinite(ops)&&isFinite(ab)&&ab>=15)recMap[p.id]={ops,ab};
+        });
+      }catch(e){}
+    }
+    const eff=o=>{
+      if(!(isFinite(o.sOPS)&&o.sOPS>0))return null;
+      const r2=recMap[o.id];
+      if(!r2)return o.sOPS;
+      const w=Math.min(0.35,r2.ab/(r2.ab+60));  // 近況權重上限35%
+      return o.sOPS*(1-w)+r2.ops*w;
+    };
+    const calc=side=>{
+      const arr=(orders[side]||[]).map(eff).filter(v=>v!=null);
       if(arr.length<7)return null;
-      return arr.reduce((a,b)=>a+b,0)/arr.length;
+      return arr.reduce((s,v)=>s+v,0)/arr.length;
     };
     const a=calc('away'),h=calc('home');
     const exm=ex?.map||{};
