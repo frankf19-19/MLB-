@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.25 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.26 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -688,9 +688,11 @@ async function fetchPitcherStats(ids,season,endDate){
     const era=parseFloat(st.era), ip=parseFloat(st.inningsPitched);
     const w=parseInt(st.wins), l=parseInt(st.losses);
     const so=parseInt(st.strikeOuts), bb=parseInt(st.baseOnBalls), hr=parseInt(st.homeRuns);
+    const gsN=parseInt(st.gamesStarted);
     if(isFinite(era)&&isFinite(ip)){out[p.id]=out[p.id]||{};out[p.id][key]={era,ip,
       w:isFinite(w)?w:null,l:isFinite(l)?l:null,
-      so:isFinite(so)?so:null,bb:isFinite(bb)?bb:null,hr:isFinite(hr)?hr:null};
+      so:isFinite(so)?so:null,bb:isFinite(bb)?bb:null,hr:isFinite(hr)?hr:null,
+      gs:isFinite(gsN)?gsN:null};
       out[p.id].hand=p.pitchHand?.code||out[p.id].hand;}});};
   try{
     parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${season}-01-01,endDate=${endDate},season=${season})`),'season');
@@ -722,6 +724,7 @@ async function fetchPitcherStats(ids,season,endDate){
       let era=s.era;
       if(r&&r.ip>=8){const wr=0.35*r.ip/(r.ip+15);era=(1-wr)*s.era+wr*r.era;}
       o.era=era;o.ip=s.ip;o.seasonEra=s.era;o.w=s.w;o.l=s.l;
+      if(s.gs>=3)o.ipStart=Math.max(3,Math.min(7.5,s.ip/s.gs));
       if(s.ip>=20&&s.so!=null&&s.bb!=null&&s.hr!=null){
         const fip=(13*s.hr+3*s.bb-2*s.so)/s.ip+3.15;
         if(isFinite(fip)&&fip>0){o.fip=+fip.toFixed(2);o.era=0.6*o.era+0.4*fip;}
@@ -1044,8 +1047,13 @@ function predict(g,pm,lg,ps,ex){
   const _tn=(window._cloud&&window._cloud.tune)||{};
   const stW=_tn.stW||1, bpW=_tn.bpW||1;
   const dHome=stAdj(hStV), dAway=stAdj(aStV);
-  if(dHome!=null)expAway+=dHome*stW;
-  if(dAway!=null)expHome+=dAway*stW;
+  const ipScale=st2=>{
+    const e=(st2&&Number.isFinite(st2.ipStart))?st2.ipStart:5.2;
+    return {st:Math.max(.75,Math.min(1.25,e/5.2)),bp:Math.max(.75,Math.min(1.25,(9-e)/3.8))};
+  };
+  const scH=ipScale(hStV),scA=ipScale(aStV);
+  if(dHome!=null)expAway+=dHome*stW*scH.st;
+  if(dAway!=null)expHome+=dAway*stW*scA.st;
   const recNote=st=>{
     if(!st||!isFinite(st.recEra)||!isFinite(st.seasonEra))return '';
     const diff=st.recEra-st.seasonEra;
@@ -1078,8 +1086,8 @@ function predict(g,pm,lg,ps,ex){
     return Math.max(-0.5,Math.min(0.5,d));
   };
   const bpH=bpAdj(g.homeId), bpA=bpAdj(g.awayId);
-  if(bpH!=null)expAway+=bpH*bpW;
-  if(bpA!=null)expHome+=bpA*bpW;
+  if(bpH!=null)expAway+=bpH*bpW*scH.bp;
+  if(bpA!=null)expHome+=bpA*bpW*scA.bp;
   let bpTxt='';
   if(bpH!=null&&bpA!=null){
     const eH=exm[g.homeId].bpEra,eA=exm[g.awayId].bpEra,edge=bpA-bpH;
@@ -1134,6 +1142,8 @@ function predict(g,pm,lg,ps,ex){
   if(hStV&&Math.abs(hStV.venAdj||0)>=0.15)venNotes.push(`主隊先發${hStV.venAdj<0?'主場更穩':'主場偏弱'}`);
   if(aStV&&Math.abs(aStV.venAdj||0)>=0.15)venNotes.push(`客隊先發${aStV.venAdj<0?'客場不怯':'客場走樣'}`);
   if(venNotes.length)why+=`先發主客場拆分:${venNotes.join('、')}(已微調)。`;
+  if(hStV&&Number.isFinite(hStV.ipStart)&&hStV.ipStart<=4.3)why+=`主隊先發場均僅 ${hStV.ipStart.toFixed(1)} 局(短工/假先發型),牛棚影響已加權。`;
+  if(aStV&&Number.isFinite(aStV.ipStart)&&aStV.ipStart<=4.3)why+=`客隊先發場均僅 ${aStV.ipStart.toFixed(1)} 局,牛棚影響已加權。`;
   if(Math.abs(biasAdj)>=0.15)why+=`紀錄簿校正:模型歷史上對${biasAdj>0?'主隊略低估':'客隊略低估'},已依殘差微調(${biasAdj>0?'+':''}${biasAdj.toFixed(2)})。`;
   const luNotes=[];
   if(luH<=0.985)luNotes.push(`主隊今日名單較平日偏弱(×${luH.toFixed(2)})`);
