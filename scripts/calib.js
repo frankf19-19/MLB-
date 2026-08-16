@@ -344,7 +344,7 @@ function computeTeamBias(ledger,K){
 
 /* ---------- 預測模型(與網頁版一致,回傳 pre-K 分差與期望分) ---------- */
 function predict(g,pm,lg,ps,ex,teamBias,tune){
-  const stW=(tune&&tune.stW)||1, bpW=(tune&&tune.bpW)||1;
+  const stW=(tune&&tune.stW)||1, bpW=(tune&&tune.bpW)||1, luW=(tune&&tune.luW)||1;
   const H=pm[g.homeId]||{},A=pm[g.awayId]||{};
   if(!(lg&&H.rs!=null&&H.ra!=null&&H.gp&&A.rs!=null&&A.ra!=null&&A.gp))return null;
   const hRS=H.rs/H.gp,hRA=H.ra/H.gp,aRS=A.rs/A.gp,aRA=A.ra/A.gp;
@@ -392,7 +392,8 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
   const venMix=(base,split)=>isFinite(split)?base*0.8+split*0.2:base;
   const hOffV=venMix(hPl,exH.homeRSg),aOffV=venMix(aPl,exA.awayRSg);
   const hDefV=venMix(hDef,exH.homeRAg),aDefV=venMix(aDef,exA.awayRAg);
-  const luH=luAdj(g.luH),luA=luAdj(g.luA);
+  const luH=Math.max(.925,Math.min(1.075,1+(luAdj(g.luH)-1)*luW));
+  const luA=Math.max(.925,Math.min(1.075,1+(luAdj(g.luA)-1)*luW));
   let expHome=(hOffV*luH/lg)*(aDefV/lg)*lg+HOME_RUN_BOOST,expAway=(aOffV*luA/lg)*(hDefV/lg)*lg;
   const fat=ex?.fatigue||{};
   if((fat[g.homeId]||0)>=3.5)expAway+=0.2;
@@ -498,6 +499,7 @@ function classifyMiss(g,p,K,SIG){
   console.log('球隊偏差校正:',Object.keys(teamBias).length,'隊納入');
   // 自我調權:近30天未中歸因 vs 整季基準 → 微調層權重(步伐0.02,範圍0.85-1.20,無訊號時緩慢歸位)
   state.tune=state.tune||{stW:1,bpW:1};
+  if(state.tune.luW==null)state.tune.luW=1;
   {
     const Lv=state.ledger.filter(x=>x.m!=null&&x.am!=null);
     const dsAll=[...new Set(Lv.map(x=>x.d))].sort();
@@ -512,8 +514,9 @@ function classifyMiss(g,p,K,SIG){
     };
     state.tune.stW=step(state.tune.stW,rate(R,'shell'),rate(G,'shell'));
     state.tune.bpW=step(state.tune.bpW,rate(R,'late'),rate(G,'late'));
-    console.log(`自我調權(依近30天歸因):先發層×${state.tune.stW} 牛棚層×${state.tune.bpW}`+
-      `(近30天 shell ${(rate(R,'shell')*100).toFixed(1)}%/基準 ${(rate(G,'shell')*100).toFixed(1)}%、late ${(rate(R,'late')*100).toFixed(1)}%/基準 ${(rate(G,'late')*100).toFixed(1)}%)`);
+    state.tune.luW=step(state.tune.luW,rate(R,'cold'),rate(G,'cold'));
+    console.log(`自我調權(依近30天歸因):先發層×${state.tune.stW} 牛棚層×${state.tune.bpW} 名單層×${state.tune.luW}`+
+      `(shell ${(rate(R,'shell')*100).toFixed(1)}%/${(rate(G,'shell')*100).toFixed(1)}%、late ${(rate(R,'late')*100).toFixed(1)}%/${(rate(G,'late')*100).toFixed(1)}%、cold ${(rate(R,'cold')*100).toFixed(1)}%/${(rate(G,'cold')*100).toFixed(1)}%)`);
   }
   const seen=new Set(state.ledger.map(x=>x.id));
   let dates=[];for(let d=start;d<=yesterday;d=shiftDate(d,1))dates.push(d);
