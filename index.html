@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.29 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.30 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -699,6 +699,18 @@ async function fetchPitcherStats(ids,season,endDate){
   }catch(e){}
   try{
     parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${shiftDate(endDate,-29)},endDate=${endDate},season=${season})`),'recent');
+  }catch(e){}
+  try{
+    const dg=await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[gameLog],season=${season})`);
+    (dg.people||[]).forEach(p=>{
+      const sp0=(p.stats||[]).find(s=>s.group?.displayName==='pitching')?.splits||[];
+      const sp=sp0.filter(s=>s.date&&s.date<=endDate);
+      if(!sp.length)return;
+      const last=sp[sp.length-1];
+      const pit=parseInt(last.stat?.numberOfPitches);
+      out[p.id]=out[p.id]||{};
+      out[p.id].lastOut={d:last.date,pit:isFinite(pit)?pit:null};
+    });
   }catch(e){}
   try{
     const d=await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[statSplits],sitCodes=[h,a],season=${season})`);
@@ -1073,13 +1085,31 @@ function predict(g,pm,lg,ps,ex){
   const _tn=(window._cloud&&window._cloud.tune)||{};
   const stW=_tn.stW||1, bpW=_tn.bpW||1;
   const dHome=stAdj(hStV), dAway=stAdj(aStV);
+  const gd0=(g.ts||'').slice(0,10);
+  const restInfo=st2=>{
+    if(!st2||!st2.lastOut||!st2.lastOut.d||!gd0)return null;
+    const gap=Math.round((new Date(gd0)-new Date(st2.lastOut.d))/864e5);
+    if(!(gap>0&&gap<60))return null;
+    return {gap,pit:st2.lastOut.pit};
+  };
+  const restAdj=(st2)=>{
+    const ri=restInfo(st2);if(!ri)return {pen:0,shrink:1,note:null};
+    let pen=0,shrink=1,note=null;
+    if(ri.gap<=4){pen+=0.10;note=`短休上陣(僅休 ${ri.gap-1} 天)`;}
+    if(ri.pit!=null&&ri.pit>=105){pen+=0.05;note=(note?note+'且':'')+`上場投 ${ri.pit} 球負荷重`;}
+    if(ri.gap>=11){shrink=0.7;note=`距上次登板 ${ri.gap} 天(復出戰,不確定性高)`;}
+    return {pen:Math.min(0.15,pen),shrink,note};
+  };
+  const raH=restAdj(hStV),raA=restAdj(aStV);
+  if(raH.pen)expAway+=raH.pen;
+  if(raA.pen)expHome+=raA.pen;
   const ipScale=st2=>{
     const e=(st2&&Number.isFinite(st2.ipStart))?st2.ipStart:5.2;
     return {st:Math.max(.75,Math.min(1.25,e/5.2)),bp:Math.max(.75,Math.min(1.25,(9-e)/3.8))};
   };
   const scH=ipScale(hStV),scA=ipScale(aStV);
-  if(dHome!=null)expAway+=dHome*stW*scH.st;
-  if(dAway!=null)expHome+=dAway*stW*scA.st;
+  if(dHome!=null)expAway+=dHome*stW*scH.st*raH.shrink;
+  if(dAway!=null)expHome+=dAway*stW*scA.st*raA.shrink;
   const recNote=st=>{
     if(!st||!isFinite(st.recEra)||!isFinite(st.seasonEra))return '';
     const diff=st.recEra-st.seasonEra;
@@ -1168,6 +1198,8 @@ function predict(g,pm,lg,ps,ex){
   if(hStV&&Math.abs(hStV.venAdj||0)>=0.15)venNotes.push(`主隊先發${hStV.venAdj<0?'主場更穩':'主場偏弱'}`);
   if(aStV&&Math.abs(aStV.venAdj||0)>=0.15)venNotes.push(`客隊先發${aStV.venAdj<0?'客場不怯':'客場走樣'}`);
   if(venNotes.length)why+=`先發主客場拆分:${venNotes.join('、')}(已微調)。`;
+  if(raH.note)why+=`主隊先發:${raH.note}。`;
+  if(raA.note)why+=`客隊先發:${raA.note}。`;
   if(hStV&&Number.isFinite(hStV.ipStart)&&hStV.ipStart<=4.3)why+=`主隊先發場均僅 ${hStV.ipStart.toFixed(1)} 局(短工/假先發型),牛棚影響已加權。`;
   if(aStV&&Number.isFinite(aStV.ipStart)&&aStV.ipStart<=4.3)why+=`客隊先發場均僅 ${aStV.ipStart.toFixed(1)} 局,牛棚影響已加權。`;
   if(Math.abs(biasAdj)>=0.15)why+=`紀錄簿校正:模型歷史上對${biasAdj>0?'主隊略低估':'客隊略低估'},已依殘差微調(${biasAdj>0?'+':''}${biasAdj.toFixed(2)})。`;
