@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.37 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.38 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1129,7 +1129,9 @@ function predict(g,pm,lg,ps,ex){
   const hOffV=venMix(hPl.v,exH.homeRSg), aOffV=venMix(aPl.v,exA.awayRSg);
   const hDefV=venMix(hDef.v,exH.homeRAg), aDefV=venMix(aDef.v,exA.awayRAg);
 
-  const luH=luAdj(g.luH), luA=luAdj(g.luA);
+  const _luW=((window._cloud&&window._cloud.tune)||{}).luW||1;
+  const luH=Math.max(.925,Math.min(1.075,1+(luAdj(g.luH)-1)*_luW));
+  const luA=Math.max(.925,Math.min(1.075,1+(luAdj(g.luA)-1)*_luW));
   let expHome=(hOffV*luH/lg)*(aDefV/lg)*lg+HOME_RUN_BOOST, expAway=(aOffV*luA/lg)*(hDefV/lg)*lg;
 
   // ② 牛棚疲勞:三連戰+昨日惡戰(一分差/延長)→ 對手得分期望 +0.2
@@ -2765,7 +2767,7 @@ async function autoCalibrate(){
     const st=$('status');
     const upd=new Date(window._cloud.updated);
     const tn=window._cloud.tune||{};
-    const tnTxt=((tn.stW&&tn.stW!==1)||(tn.bpW&&tn.bpW!==1))?` · 自我調權 先發×${(tn.stW||1).toFixed(2)} 牛棚×${(tn.bpW||1).toFixed(2)}`:'';
+    const tnTxt=((tn.stW&&tn.stW!==1)||(tn.bpW&&tn.bpW!==1)||(tn.luW&&tn.luW!==1))?` · 自我調權 先發×${(tn.stW||1).toFixed(2)} 牛棚×${(tn.bpW||1).toFixed(2)} 名單×${(tn.luW||1).toFixed(2)}`:'';
     st.textContent=`☁ 雲端校準已同步(全裝置一致):K=${MARGIN_K.toFixed(2)} σ=${RUN_SIGMA.toFixed(2)} · ${window._cloud.window||60}天窗口 · 紀錄簿 ${window._cloud.ledger?.length||0} 場${tnTxt} · 更新於 ${upd.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
     return;
   }
