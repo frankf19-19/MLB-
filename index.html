@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.34 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.35 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1330,11 +1330,15 @@ function favTier(p,actMargin,hit){
   const bp=marginBands(Math.abs((p.raw_margin||0)*MARGIN_K),p.sig_scale);
   if(!bp)return null;
   const favAct=(p.raw_margin||0)>=0?actMargin:-actMargin;
-  const bandHit=bp.indexOf(Math.max(...bp))===favBandOf(favAct);
-  if(hit&&bandHit)return {code:'full',zh:'全中',bandHit};
-  if(hit)return {code:'winOnly',zh:'中勝隊',bandHit};
-  if(bandHit)return {code:'upsetWarned',zh:'帶位預警',bandHit};
-  return {code:'wrong',zh:'全錯',bandHit};
+  if(hit){
+    // 勝隊已中:帶位只在勝格(勝1/勝2/勝3+)內公平對決
+    const wb=[bp[1],bp[2],bp[3]];
+    const wi=wb.indexOf(Math.max(...wb))+1;
+    const bandHit=wi===favBandOf(favAct);
+    return bandHit?{code:'full',zh:'全中',bandHit}:{code:'winOnly',zh:'中勝隊',bandHit:false};
+  }
+  const upsetTop=bp.indexOf(Math.max(...bp))===0;
+  return upsetTop?{code:'upsetWarned',zh:'帶位預警',bandHit:true}:{code:'wrong',zh:'全錯',bandHit:false};
 }
 function bandReview(p,actMargin){
   const sc=p.sig_scale;
@@ -2877,14 +2881,20 @@ $('calibRun').addEventListener('click',async()=>{
             const bp=marginBands(Math.abs(x.m*MARGIN_K));if(!bp)return;
             const winnerHit=(x.m>=0)===x.homeWon;
             const favAct=x.m>=0?x.actM:-x.actM;
-            const bandHit=bp.indexOf(Math.max(...bp))===favBandOf(favAct);
-            if(winnerHit&&bandHit)T.full++;else if(winnerHit)T.winOnly++;
-            else if(bandHit)T.upsetWarned++;else T.wrong++;
-            if(winnerHit){condN++;if(bandHit)condHit++;actCnt[favBandOf(favAct)]++;}
+            if(winnerHit){
+              const wb=[bp[1],bp[2],bp[3]];
+              const wi=wb.indexOf(Math.max(...wb))+1;
+              const bandHit=wi===favBandOf(favAct);
+              if(bandHit)T.full++;else T.winOnly++;
+              condN++;if(bandHit)condHit++;actCnt[favBandOf(favAct)]++;
+            }else{
+              const upsetTop=bp.indexOf(Math.max(...bp))===0;
+              if(upsetTop)T.upsetWarned++;else T.wrong++;
+            }
           });
           const N2=T.full+T.winOnly+T.upsetWarned+T.wrong;
           if(!N2)return '';
-          const base=condN?Math.max(...actCnt)/condN:0;
+          const base=condN?Math.max(actCnt[1],actCnt[2],actCnt[3])/condN:0;
           const skill=condN?condHit/condN:0;
           const vd2=skill>base+0.02?'帶位判斷優於天真基準,分差層有真實技能。'
             :skill>base-0.02?'帶位判斷與天真基準相當——分差精進空間在此。'
