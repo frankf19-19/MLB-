@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.32 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.33 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1273,7 +1273,7 @@ function predict(g,pm,lg,ps,ex){
   if(Math.abs(margin)<0.8) why+=`分差不到 1 分,實質接近五五波。`;
   return {home_prob:hp,away_prob:1-hp,predicted_winner:fav,home_score_pred:hs,away_score_pred:as,
     exp_home:+expHome.toFixed(1),exp_away:+expAway.toFixed(1),
-    margin:Math.abs(margin),raw_margin:margin,raw_margin_pre:marginPre,why,
+    margin:Math.abs(margin),raw_margin:margin,raw_margin_pre:marginPre,sig_scale:sigScale,why,
     pitAdjusted:(dHome!=null||dAway!=null),bpAdjusted:(bpH!=null&&bpA!=null)};
 }
 /* 未中歸因診斷:解剖每場沒中的比賽 */
