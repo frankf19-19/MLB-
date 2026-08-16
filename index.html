@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.26 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.27 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1326,7 +1326,15 @@ function gameCard(g,p,rv){
     ?`<div class="meta scorepred">預期比分 <b>${p.exp_away!=null?p.exp_away.toFixed(1):p.away_score_pred}–${p.exp_home!=null?p.exp_home.toFixed(1):p.home_score_pred}</b>(客–主,約 ${p.away_score_pred}:${p.home_score_pred}) · 分差 <b>${r1(p.margin)}</b> · 總分期望 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b>${(()=>{
       const b=marginBands(p.raw_margin!=null?Math.abs(p.raw_margin*MARGIN_K):null);
       return b?` · 預測隊落點 爆冷敗${(b[0]*100).toFixed(0)}%·勝1分${(b[1]*100).toFixed(0)}%·勝2分${(b[2]*100).toFixed(0)}%·勝3+${(b[3]*100).toFixed(0)}%`:'';
-    })()} · 預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`
+    })()} · 預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)${(()=>{
+      const mAbs=Math.abs((p.raw_margin||0)*MARGIN_K);
+      let tier,color;
+      if(mAbs<0.4){tier='均勢';color='var(--muted)';}
+      else if(mAbs<0.9){tier='小優';color='var(--ink2)';}
+      else if(mAbs<1.5){tier='優勢';color='var(--teal)';}
+      else{tier='強壓';color='var(--amber)';}
+      return ` <span style="font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:8px;background:color-mix(in srgb,${color} 14%,transparent);color:${color};border:1px solid color-mix(in srgb,${color} 35%,transparent)">${tier}</span>`;
+    })()}</div>`
     :`<div class="meta scorepred">預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)</div>`;
   const gdayBtn=(isLive||isFinal)?`<button class="gday" data-gid="${g.id}">GAMEDAY ▶</button>`:'';
   return `<div class="game ${isFinal?'done':''}">
