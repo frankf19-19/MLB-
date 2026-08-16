@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.24 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.25 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1041,9 +1041,11 @@ function predict(g,pm,lg,ps,ex){
     return Object.assign({},st,{era:(1-w)*st.era+w*v.era,venAdj:+((v.era-st.era)*w).toFixed(2)});
   };
   const hStV=venueEra(hSt,'h'), aStV=venueEra(aSt,'a');
+  const _tn=(window._cloud&&window._cloud.tune)||{};
+  const stW=_tn.stW||1, bpW=_tn.bpW||1;
   const dHome=stAdj(hStV), dAway=stAdj(aStV);
-  if(dHome!=null)expAway+=dHome;
-  if(dAway!=null)expHome+=dAway;
+  if(dHome!=null)expAway+=dHome*stW;
+  if(dAway!=null)expHome+=dAway*stW;
   const recNote=st=>{
     if(!st||!isFinite(st.recEra)||!isFinite(st.seasonEra))return '';
     const diff=st.recEra-st.seasonEra;
@@ -1076,8 +1078,8 @@ function predict(g,pm,lg,ps,ex){
     return Math.max(-0.5,Math.min(0.5,d));
   };
   const bpH=bpAdj(g.homeId), bpA=bpAdj(g.awayId);
-  if(bpH!=null)expAway+=bpH;
-  if(bpA!=null)expHome+=bpA;
+  if(bpH!=null)expAway+=bpH*bpW;
+  if(bpA!=null)expHome+=bpA*bpW;
   let bpTxt='';
   if(bpH!=null&&bpA!=null){
     const eH=exm[g.homeId].bpEra,eA=exm[g.awayId].bpEra,edge=bpA-bpH;
@@ -2559,7 +2561,9 @@ async function autoCalibrate(){
   if(window._cloud){
     const st=$('status');
     const upd=new Date(window._cloud.updated);
-    st.textContent=`☁ 雲端校準已同步(全裝置一致):K=${MARGIN_K.toFixed(2)} σ=${RUN_SIGMA.toFixed(2)} · ${window._cloud.window||60}天窗口 · 紀錄簿 ${window._cloud.ledger?.length||0} 場 · 更新於 ${upd.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+    const tn=window._cloud.tune||{};
+    const tnTxt=((tn.stW&&tn.stW!==1)||(tn.bpW&&tn.bpW!==1))?` · 自我調權 先發×${(tn.stW||1).toFixed(2)} 牛棚×${(tn.bpW||1).toFixed(2)}`:'';
+    st.textContent=`☁ 雲端校準已同步(全裝置一致):K=${MARGIN_K.toFixed(2)} σ=${RUN_SIGMA.toFixed(2)} · ${window._cloud.window||60}天窗口 · 紀錄簿 ${window._cloud.ledger?.length||0} 場${tnTxt} · 更新於 ${upd.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
     return;
   }
   if(calibRunning)return;
