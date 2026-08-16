@@ -244,24 +244,34 @@ const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.06,Ma
 
 /* ⑪ 球隊偏差校正(與網頁版一致) */
 function computeTeamBias(ledger,K){
-  if(!ledger||ledger.length<150)return {};
-  const acc={};
-  ledger.forEach(x=>{
-    if(x.m==null||x.am==null)return;
+  const L=(ledger||[]).filter(x=>x.m!=null&&x.am!=null);
+  if(L.length<150)return {};
+  const ds=[...new Set(L.map(x=>x.d))].sort();
+  const cut=ds[Math.max(0,ds.length-30)];
+  const accS={},accR={};
+  L.forEach(x=>{
     const r=x.am-x.m*K;
-    (acc[x.hm]=acc[x.hm]||{s:0,n:0}).s+=r;acc[x.hm].n++;
-    (acc[x.aw]=acc[x.aw]||{s:0,n:0}).s-=r;acc[x.aw].n++;
+    (accS[x.hm]=accS[x.hm]||{s:0,n:0}).s+=r;accS[x.hm].n++;
+    (accS[x.aw]=accS[x.aw]||{s:0,n:0}).s-=r;accS[x.aw].n++;
+    if(x.d>=cut){
+      (accR[x.hm]=accR[x.hm]||{s:0,n:0}).s+=r;accR[x.hm].n++;
+      (accR[x.aw]=accR[x.aw]||{s:0,n:0}).s-=r;accR[x.aw].n++;
+    }
   });
   const out={};
-  Object.entries(acc).forEach(([nm,a])=>{
-    if(a.n<20)return;
-    out[nm]=Math.max(-0.25,Math.min(0.25,(a.s/a.n)*a.n/(a.n+100)));
+  Object.keys(accS).forEach(nm=>{
+    const S=accS[nm];if(S.n<20)return;
+    const bS=(S.s/S.n)*S.n/(S.n+100);
+    const R=accR[nm];
+    const bR=(R&&R.n>=10)?(R.s/R.n)*R.n/(R.n+40):bS;
+    out[nm]=Math.max(-0.35,Math.min(0.35,bS*0.4+bR*0.6));
   });
   return out;
 }
 
 /* ---------- 預測模型(與網頁版一致,回傳 pre-K 分差與期望分) ---------- */
-function predict(g,pm,lg,ps,ex,teamBias){
+function predict(g,pm,lg,ps,ex,teamBias,tune){
+  const stW=(tune&&tune.stW)||1, bpW=(tune&&tune.bpW)||1;
   const H=pm[g.homeId]||{},A=pm[g.awayId]||{};
   if(!(lg&&H.rs!=null&&H.ra!=null&&H.gp&&A.rs!=null&&A.ra!=null&&A.gp))return null;
   const hRS=H.rs/H.gp,hRA=H.ra/H.gp,aRS=A.rs/A.gp,aRA=A.ra/A.gp;
@@ -310,8 +320,8 @@ function predict(g,pm,lg,ps,ex,teamBias){
     return Math.max(-0.8,Math.min(0.8,(st.era-lgERA)/9*5.8*w*0.5));
   };
   const dHome=stAdj(hStV),dAway=stAdj(aStV);
-  if(dHome!=null)expAway+=dHome;
-  if(dAway!=null)expHome+=dAway;
+  if(dHome!=null)expAway+=dHome*stW;
+  if(dAway!=null)expHome+=dAway*stW;
   const lgBp=ex?.lgBpEra;
   const bpAdj=t=>{
     const bp=exm[t]?.bpEra;
@@ -319,8 +329,8 @@ function predict(g,pm,lg,ps,ex,teamBias){
     return Math.max(-0.5,Math.min(0.5,(bp-lgBp)/9*3.2*0.6));
   };
   const bpH=bpAdj(g.homeId),bpA=bpAdj(g.awayId);
-  if(bpH!=null)expAway+=bpH;
-  if(bpA!=null)expHome+=bpA;
+  if(bpH!=null)expAway+=bpH*bpW;
+  if(bpA!=null)expHome+=bpA*bpW;
   const pf=PARK_F[g.homeId]||1;
   if(pf!==1){expHome*=pf;expAway*=pf;}
   if(Number.isFinite(g.wxTemp)){
@@ -335,7 +345,7 @@ function predict(g,pm,lg,ps,ex,teamBias){
   }
   if(teamBias){
     let b=(teamBias[g.home]||0)-(teamBias[g.away]||0);
-    b=Math.max(-0.4,Math.min(0.4,b));
+    b=Math.max(-0.55,Math.min(0.55,b));
     expHome+=b/2;expAway-=b/2;
   }
   return {mPre:expHome-expAway,expHome,expAway};
@@ -370,6 +380,25 @@ function classifyMiss(g,p,K,SIG){
   const ex=await fetchTeamExtras(season,yesterday);
   const teamBias=computeTeamBias(state.ledger,state.k);
   console.log('球隊偏差校正:',Object.keys(teamBias).length,'隊納入');
+  // 自我調權:近30天未中歸因 vs 整季基準 → 微調層權重(步伐0.02,範圍0.85-1.20,無訊號時緩慢歸位)
+  state.tune=state.tune||{stW:1,bpW:1};
+  {
+    const Lv=state.ledger.filter(x=>x.m!=null&&x.am!=null);
+    const dsAll=[...new Set(Lv.map(x=>x.d))].sort();
+    const cut30=dsAll[Math.max(0,dsAll.length-30)];
+    const R=Lv.filter(x=>x.d>=cut30), G=Lv;
+    const rate=(arr,cat)=>arr.length?arr.filter(x=>x.cat===cat).length/arr.length:0;
+    const step=(w,recent,base)=>{
+      if(recent>base*1.35&&recent-base>0.01)w=Math.min(1.20,w+0.02);      // 該類系統性偏多 → 加重
+      else if(recent<base*0.7)w=Math.max(0.85,w-0.02);                    // 明顯偏少 → 減輕
+      else w=w>1?Math.max(1,w-0.01):(w<1?Math.min(1,w+0.01):w);           // 無訊號 → 緩慢歸位
+      return Math.round(w*100)/100;
+    };
+    state.tune.stW=step(state.tune.stW,rate(R,'shell'),rate(G,'shell'));
+    state.tune.bpW=step(state.tune.bpW,rate(R,'late'),rate(G,'late'));
+    console.log(`自我調權(依近30天歸因):先發層×${state.tune.stW} 牛棚層×${state.tune.bpW}`+
+      `(近30天 shell ${(rate(R,'shell')*100).toFixed(1)}%/基準 ${(rate(G,'shell')*100).toFixed(1)}%、late ${(rate(R,'late')*100).toFixed(1)}%/基準 ${(rate(G,'late')*100).toFixed(1)}%)`);
+  }
   const seen=new Set(state.ledger.map(x=>x.id));
   let dates=[];for(let d=start;d<=yesterday;d=shiftDate(d,1))dates.push(d);
   console.log(`處理 ${dates.length} 天:${start} → ${yesterday}`);
@@ -393,7 +422,7 @@ function classifyMiss(g,p,K,SIG){
         if(Number.isFinite(wt))g.wxTemp=wt;
         const hh=await fetchH2H(g,season,date);
         if(hh)g._h2h=hh;
-        const p=predict(g,pm,lg,ps,ex2,teamBias);if(!p)continue;
+        const p=predict(g,pm,lg,ps,ex2,teamBias,state.tune);if(!p)continue;
         const hit=((p.mPre>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
