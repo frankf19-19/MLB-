@@ -82,6 +82,18 @@ async function fetchPitcherStats(ids,season,endDate){
   try{parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${season}-01-01,endDate=${endDate},season=${season})`),'season');}catch(e){}
   try{parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${shiftDate(endDate,-29)},endDate=${endDate},season=${season})`),'recent');}catch(e){}
   try{
+    const dg=await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[gameLog],season=${season})`);
+    (dg.people||[]).forEach(p=>{
+      const sp0=(p.stats||[]).find(s=>s.group?.displayName==='pitching')?.splits||[];
+      const sp=sp0.filter(s=>s.date&&s.date<=endDate);
+      if(!sp.length)return;
+      const last=sp[sp.length-1];
+      const pit=parseInt(last.stat?.numberOfPitches);
+      out[p.id]=out[p.id]||{};
+      out[p.id].lastOut={d:last.date,pit:isFinite(pit)?pit:null};
+    });
+  }catch(e){}
+  try{
     const d=await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[statSplits],sitCodes=[h,a],season=${season})`);
     (d.people||[]).forEach(p=>{
       const sp=(p.stats||[]).find(s=>s.group?.displayName==='pitching')?.splits||[];
@@ -348,13 +360,31 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     return Math.max(-0.8,Math.min(0.8,(st.era-lgERA)/9*5.8*w*0.5));
   };
   const dHome=stAdj(hStV),dAway=stAdj(aStV);
+  const gd0=(g.ts||'').slice(0,10);
+  const restInfo=st2=>{
+    if(!st2||!st2.lastOut||!st2.lastOut.d||!gd0)return null;
+    const gap=Math.round((new Date(gd0)-new Date(st2.lastOut.d))/864e5);
+    if(!(gap>0&&gap<60))return null;
+    return {gap,pit:st2.lastOut.pit};
+  };
+  const restAdj=(st2)=>{
+    const ri=restInfo(st2);if(!ri)return {pen:0,shrink:1,note:null};
+    let pen=0,shrink=1,note=null;
+    if(ri.gap<=4){pen+=0.10;note=`短休上陣(僅休 ${ri.gap-1} 天)`;}
+    if(ri.pit!=null&&ri.pit>=105){pen+=0.05;note=(note?note+'且':'')+`上場投 ${ri.pit} 球負荷重`;}
+    if(ri.gap>=11){shrink=0.7;note=`距上次登板 ${ri.gap} 天(復出戰,不確定性高)`;}
+    return {pen:Math.min(0.15,pen),shrink,note};
+  };
+  const raH=restAdj(hStV),raA=restAdj(aStV);
+  if(raH.pen)expAway+=raH.pen;
+  if(raA.pen)expHome+=raA.pen;
   const ipScale=st2=>{
     const e=(st2&&Number.isFinite(st2.ipStart))?st2.ipStart:5.2;
     return {st:Math.max(.75,Math.min(1.25,e/5.2)),bp:Math.max(.75,Math.min(1.25,(9-e)/3.8))};
   };
   const scH=ipScale(hStV),scA=ipScale(aStV);
-  if(dHome!=null)expAway+=dHome*stW*scH.st;
-  if(dAway!=null)expHome+=dAway*stW*scA.st;
+  if(dHome!=null)expAway+=dHome*stW*scH.st*raH.shrink;
+  if(dAway!=null)expHome+=dAway*stW*scA.st*raA.shrink;
   const lgBp=ex?.lgBpEra;
   const bpAdj=t=>{
     const bp=exm[t]?.bpEra;
