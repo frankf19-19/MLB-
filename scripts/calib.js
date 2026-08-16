@@ -74,8 +74,10 @@ async function fetchPitcherStats(ids,season,endDate){
     if(!sp.length)return;const st=sp[sp.length-1].stat||{};
     const era=parseFloat(st.era),ip=parseFloat(st.inningsPitched);
     const so=parseInt(st.strikeOuts),bb=parseInt(st.baseOnBalls),hr=parseInt(st.homeRuns);
+    const gsN=parseInt(st.gamesStarted);
     if(isFinite(era)&&isFinite(ip)){out[p.id]=out[p.id]||{};out[p.id][key]={era,ip,
-      so:isFinite(so)?so:null,bb:isFinite(bb)?bb:null,hr:isFinite(hr)?hr:null};
+      so:isFinite(so)?so:null,bb:isFinite(bb)?bb:null,hr:isFinite(hr)?hr:null,
+      gs:isFinite(gsN)?gsN:null};
       out[p.id].hand=p.pitchHand?.code||out[p.id].hand;}});};
   try{parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${season}-01-01,endDate=${endDate},season=${season})`),'season');}catch(e){}
   try{parseInto(await jget(`${API}/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[byDateRange],startDate=${shiftDate(endDate,-29)},endDate=${endDate},season=${season})`),'recent');}catch(e){}
@@ -98,6 +100,7 @@ async function fetchPitcherStats(ids,season,endDate){
       let era=s.era;
       if(r&&r.ip>=8){const wr=0.35*r.ip/(r.ip+15);era=(1-wr)*s.era+wr*r.era;}
       o.era=era;o.ip=s.ip;o.seasonEra=s.era;
+      if(s.gs>=3)o.ipStart=Math.max(3,Math.min(7.5,s.ip/s.gs));
       if(s.ip>=20&&s.so!=null&&s.bb!=null&&s.hr!=null){
         const fip=(13*s.hr+3*s.bb-2*s.so)/s.ip+3.15;
         if(isFinite(fip)&&fip>0)o.era=0.6*o.era+0.4*fip;
@@ -320,8 +323,13 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     return Math.max(-0.8,Math.min(0.8,(st.era-lgERA)/9*5.8*w*0.5));
   };
   const dHome=stAdj(hStV),dAway=stAdj(aStV);
-  if(dHome!=null)expAway+=dHome*stW;
-  if(dAway!=null)expHome+=dAway*stW;
+  const ipScale=st2=>{
+    const e=(st2&&Number.isFinite(st2.ipStart))?st2.ipStart:5.2;
+    return {st:Math.max(.75,Math.min(1.25,e/5.2)),bp:Math.max(.75,Math.min(1.25,(9-e)/3.8))};
+  };
+  const scH=ipScale(hStV),scA=ipScale(aStV);
+  if(dHome!=null)expAway+=dHome*stW*scH.st;
+  if(dAway!=null)expHome+=dAway*stW*scA.st;
   const lgBp=ex?.lgBpEra;
   const bpAdj=t=>{
     const bp=exm[t]?.bpEra;
@@ -329,8 +337,8 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     return Math.max(-0.5,Math.min(0.5,(bp-lgBp)/9*3.2*0.6));
   };
   const bpH=bpAdj(g.homeId),bpA=bpAdj(g.awayId);
-  if(bpH!=null)expAway+=bpH*bpW;
-  if(bpA!=null)expHome+=bpA*bpW;
+  if(bpH!=null)expAway+=bpH*bpW*scH.bp;
+  if(bpA!=null)expHome+=bpA*bpW*scA.bp;
   const pf=PARK_F[g.homeId]||1;
   if(pf!==1){expHome*=pf;expAway*=pf;}
   if(Number.isFinite(g.wxTemp)){
