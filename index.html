@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.23 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.24 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1182,6 +1182,16 @@ function classifyMiss(g,p){
   if(favR<=favExp-2.5)return 'cold';
   return 'edge';
 }
+function favTier(p,actMargin,hit){
+  const bp=marginBands(Math.abs((p.raw_margin||0)*MARGIN_K));
+  if(!bp)return null;
+  const favAct=(p.raw_margin||0)>=0?actMargin:-actMargin;
+  const bandHit=bp.indexOf(Math.max(...bp))===favBandOf(favAct);
+  if(hit&&bandHit)return {code:'full',zh:'全中',bandHit};
+  if(hit)return {code:'winOnly',zh:'中勝隊',bandHit};
+  if(bandHit)return {code:'upsetWarned',zh:'帶位預警',bandHit};
+  return {code:'wrong',zh:'全錯',bandHit};
+}
 function bandReview(p,actMargin){
   const bp=marginBands(Math.abs((p.raw_margin||0)*MARGIN_K));
   if(!bp)return '';
@@ -1197,8 +1207,10 @@ function review(g,p){
   const actMargin=(g.homeScore??0)-(g.awayScore??0);
   const favProb=Math.round(Math.max(p.home_prob,p.away_prob)*100);
   let t;
+  const tier=favTier(p,actMargin,hit);
   if(hit){
-    t=`方向正確:預測 ${p.predicted_winner} 勝(勝率 ${favProb}%),實際 ${g.awayScore}:${g.homeScore} 由 ${actual} 拿下。`;
+    t=`命中${tier?`【${tier.zh}】`:''}:預測 ${p.predicted_winner} 勝(勝率 ${favProb}%),實際 ${g.awayScore}:${g.homeScore} 由 ${actual} 拿下。`;
+    if(tier&&tier.code==='full')t+=`勝隊與勝分差帶位雙雙命中。`;
     if(p.raw_margin!=null){
       const err=Math.abs(actMargin-p.raw_margin);
       if(err<=1.5)t+=`實際分差與預期(${r1(p.margin)} 分)相當接近,這場模型讀得準。`;
@@ -1210,11 +1222,12 @@ function review(g,p){
     t=`未命中【${MISS_ZH[cat]}】:預測 ${p.predicted_winner}(勝率 ${favProb}%),實際由 ${actual} 以 ${g.awayScore}:${g.homeScore} 拿下。`;
     t+=MISS_NOTE[cat];
     if(favProb>=68&&cat!=='coin')t+=`此為高信心爆冷,已自動納入歸因統計供修正參考。`;
+    if(tier&&tier.code==='upsetWarned')t+=`值得注意:模型的最看好帶位本來就是「爆冷敗」——勝負層看走眼,但帶位層有預警。`;
     t+=bandReview(p,actMargin);
-    return {hit,actual,actMargin,text:t,favProb,cat};
+    return {hit,actual,actMargin,text:t,favProb,cat,tier:tier?.code};
   }
   t+=bandReview(p,actMargin);
-  return {hit,actual,actMargin,text:t,favProb};
+  return {hit,actual,actMargin,text:t,favProb,tier:tier?.code};
 }
 
 /* ---------- 首頁渲染 ---------- */
@@ -1410,7 +1423,7 @@ async function loadDay(quiet){
     games.sort((a,b)=>wgt(a)-wgt(b));
     let hits=0,finals=0,errSum=0,errN=0,html='';
     const reviews=[];curGames=games;curPreds=[];
-    const focusArr=[];let blowouts=0,mb1=0,mb2=0,mb3=0,bandN=0,bandHits=0;
+    const focusArr=[];let blowouts=0,mb1=0,mb2=0,mb3=0,tFull=0,tWin=0,tWarn=0,tWrong=0;
     games.forEach(g=>{
       const A=pm[g.awayId],H=pm[g.homeId];
       g.awayRec=A?`${A.w}-${A.l}`:''; g.homeRec=H?`${H.w}-${H.l}`:'';
@@ -1422,15 +1435,9 @@ async function loadDay(quiet){
         const aM=Math.abs(rv.actMargin);
         if(aM===1)mb1++;else if(aM===2)mb2++;else mb3++;
         if(aM>=5)blowouts++;
-        if(p&&p.raw_margin!=null){
-          const bp=marginBands(Math.abs(p.raw_margin*MARGIN_K));
-          if(bp){
-            bandN++;
-            const favAct=p.raw_margin>=0?rv.actMargin:-rv.actMargin;
-            if(bp.indexOf(Math.max(...bp))===favBandOf(favAct))bandHits++;
-          }
-          errSum+=Math.abs(rv.actMargin-p.raw_margin);errN++;
-        }}
+        if(rv.tier==='full')tFull++;else if(rv.tier==='winOnly')tWin++;
+        else if(rv.tier==='upsetWarned')tWarn++;else if(rv.tier==='wrong')tWrong++;
+        if(p&&p.raw_margin!=null){errSum+=Math.abs(rv.actMargin-p.raw_margin);errN++;}}
       reviews.push(rv);html+=gameCard(g,p,rv);
       if(p&&p.home_prob!=null&&g.status!=='Final'&&!isSpecial){
         const conf=Math.max(p.home_prob,1-p.home_prob);
@@ -1470,7 +1477,7 @@ async function loadDay(quiet){
         if(!$('homeView').classList.contains('hidden'))loadDay(true);
       },45000);
     }
-    const bandNote=finals?` · 分差分布 1分${mb1}·2分${mb2}·3+${mb3}${blowouts?`(含5+大勝差 ${blowouts})`:''}${bandN?` · 帶位預測命中 ${bandHits}/${bandN}`:''}`:'';
+    const bandNote=finals?` · 分差分布 1分${mb1}·2分${mb2}·3+${mb3}${blowouts?`(含5+大勝差 ${blowouts})`:''}${(tFull+tWin+tWarn+tWrong)?` · 分辨:全中 ${tFull}·中勝隊 ${tWin}·帶位預警 ${tWarn}·全錯 ${tWrong}`:''}`:'';
     st.textContent=(finals?`完成 · ${finals} 場已完賽已比對${bandNote}`:'完成 · 該日尚無完賽結果')
       +(refreshTimer?' · 🔴 每 45 秒自動更新':'');
     bindTeamClicks();
@@ -2659,6 +2666,29 @@ $('calibRun').addEventListener('click',async()=>{
         命中率 <b>${(hitRate*100).toFixed(1)}%</b>、分差平均誤差 <b>${mErr.toFixed(2)} 分</b>、
         分差命中率(±2分內)<b>${(marginHitOf(samples,2)*100).toFixed(1)}%</b>(±1分:${(marginHitOf(samples,1)*100).toFixed(0)}%、±3分:${(marginHitOf(samples,3)*100).toFixed(0)}%)、
         實際超出預測幅度比例 ${(coverRateOf(samples)*100).toFixed(0)}%(理想≈50%)、
+        ${(()=>{
+          const T={full:0,winOnly:0,upsetWarned:0,wrong:0};let condHit=0,condN=0;
+          const actCnt=[0,0,0,0];
+          samples.forEach(x=>{
+            if(x.m==null||x.actM==null)return;
+            const bp=marginBands(Math.abs(x.m*MARGIN_K));if(!bp)return;
+            const winnerHit=(x.m>=0)===x.homeWon;
+            const favAct=x.m>=0?x.actM:-x.actM;
+            const bandHit=bp.indexOf(Math.max(...bp))===favBandOf(favAct);
+            if(winnerHit&&bandHit)T.full++;else if(winnerHit)T.winOnly++;
+            else if(bandHit)T.upsetWarned++;else T.wrong++;
+            if(winnerHit){condN++;if(bandHit)condHit++;actCnt[favBandOf(favAct)]++;}
+          });
+          const N2=T.full+T.winOnly+T.upsetWarned+T.wrong;
+          if(!N2)return '';
+          const base=condN?Math.max(...actCnt)/condN:0;
+          const skill=condN?condHit/condN:0;
+          const vd2=skill>base+0.02?'帶位判斷優於天真基準,分差層有真實技能。'
+            :skill>base-0.02?'帶位判斷與天真基準相當——分差精進空間在此。'
+            :'帶位判斷低於天真基準,落點引擎需檢視。';
+          return `勝隊×帶位分辨(${N2} 場):全中 ${T.full}(${(T.full/N2*100).toFixed(0)}%)、中勝隊 ${T.winOnly}(${(T.winOnly/N2*100).toFixed(0)}%)、帶位預警 ${T.upsetWarned}(${(T.upsetWarned/N2*100).toFixed(0)}%)、全錯 ${T.wrong}(${(T.wrong/N2*100).toFixed(0)}%)。
+          <b>分差技能隔離</b>:勝隊猜中時帶位命中 ${(skill*100).toFixed(1)}%(天真基準 ${(base*100).toFixed(1)}%)——${vd2}、`;
+        })()}
         ${_mgDist&&_mgDist.eval?`勝分差落點校準(${_mgDist.eval.n} 場,預測隊視角):模型平均 敗${(_mgDist.eval.avg[0]*100).toFixed(0)}%/勝1 ${(_mgDist.eval.avg[1]*100).toFixed(0)}%/勝2 ${(_mgDist.eval.avg[2]*100).toFixed(0)}%/勝3+ ${(_mgDist.eval.avg[3]*100).toFixed(0)}% vs 實際 ${(_mgDist.eval.act[0]*100).toFixed(0)}%/${(_mgDist.eval.act[1]*100).toFixed(0)}%/${(_mgDist.eval.act[2]*100).toFixed(0)}%/${(_mgDist.eval.act[3]*100).toFixed(0)}%、最看好帶位命中 ${(_mgDist.eval.topHit*100).toFixed(0)}%、`:''}
         ${(()=>{
           const S=samples.filter(x=>x.m!=null&&x.actM!=null);
