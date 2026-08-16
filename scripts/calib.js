@@ -225,16 +225,41 @@ async function fetchWxTemp(teamId,tsIso){
 }
 
 /* ⑫ 當日打線名單(與網頁版一致;回測用實際先發九人) */
-async function fetchLineupRatio(g,exMap){
+async function fetchLineupRatio(g,exMap,asOf){
   try{
     const box=await jget(`${API}/game/${g.id}/boxscore`);
-    const calc=side=>{
+    const orders={};
+    ['away','home'].forEach(side=>{
       const t=box.teams?.[side];const order=t?.battingOrder||[];
-      if(order.length<9)return null;
-      const arr=order.slice(0,9).map(id=>parseFloat(t.players?.['ID'+id]?.seasonStats?.batting?.ops))
-        .filter(v=>isFinite(v)&&v>0);
+      if(order.length>=9)orders[side]=order.slice(0,9).map(id=>({id,
+        sOPS:parseFloat(t.players?.['ID'+id]?.seasonStats?.batting?.ops)}));
+    });
+    const allIds=[...(orders.away||[]),...(orders.home||[])].map(o=>o.id);
+    const recMap={};
+    if(allIds.length&&asOf){
+      try{
+        const start=shiftDate(asOf,-13),yr=asOf.slice(0,4);
+        const d=await jget(`${API}/people?personIds=${allIds.join(',')}&hydrate=stats(group=[hitting],type=[byDateRange],startDate=${start},endDate=${asOf},season=${yr})`);
+        (d.people||[]).forEach(p=>{
+          const sp=(p.stats||[]).find(s=>s.group?.displayName==='hitting')?.splits||[];
+          if(!sp.length)return;
+          const st=sp[sp.length-1].stat||{};
+          const ops=parseFloat(st.ops),ab=parseInt(st.atBats);
+          if(isFinite(ops)&&isFinite(ab)&&ab>=15)recMap[p.id]={ops,ab};
+        });
+      }catch(e){}
+    }
+    const eff=o=>{
+      if(!(isFinite(o.sOPS)&&o.sOPS>0))return null;
+      const r2=recMap[o.id];
+      if(!r2)return o.sOPS;
+      const w=Math.min(0.35,r2.ab/(r2.ab+60));
+      return o.sOPS*(1-w)+r2.ops*w;
+    };
+    const calc=side=>{
+      const arr=(orders[side]||[]).map(eff).filter(v=>v!=null);
       if(arr.length<7)return null;
-      return arr.reduce((a,b)=>a+b,0)/arr.length;
+      return arr.reduce((s,v)=>s+v,0)/arr.length;
     };
     const a=calc('away'),h=calc('home');
     return {
@@ -424,7 +449,7 @@ function classifyMiss(g,p,K,SIG){
         if(/postpon|suspend|cancel/i.test(g.detail||''))continue;
         const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)continue;
         if(seen.has(g.id))continue;
-        const lu=await fetchLineupRatio(g,ex.map||{});
+        const lu=await fetchLineupRatio(g,ex.map||{},asOf);
         if(lu){g.luA=lu.a;g.luH=lu.h;}
         const wt=await fetchWxTemp(g.homeId,g.ts);
         if(Number.isFinite(wt))g.wxTemp=wt;
