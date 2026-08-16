@@ -436,8 +436,11 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     return {st:Math.max(.75,Math.min(1.25,e/5.2)),bp:Math.max(.75,Math.min(1.25,(9-e)/3.8))};
   };
   const scH=ipScale(hStV),scA=ipScale(aStV);
-  if(dHome!=null)expAway+=dHome*stW*scH.st*raH.shrink;
-  if(dAway!=null)expHome+=dAway*stW*scA.st*raA.shrink;
+  const FT={};
+  const stEffH=(dHome!=null)?dHome*stW*scH.st*raH.shrink:0;
+  const stEffA=(dAway!=null)?dAway*stW*scA.st*raA.shrink:0;
+  expAway+=stEffH;expHome+=stEffA;
+  FT.stH=stEffH;FT.stA=stEffA;
   const lgBp=ex?.lgBpEra;
   const bpAdj=t=>{
     const bp=exm[t]?.bpEra;
@@ -445,26 +448,36 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     return Math.max(-0.5,Math.min(0.5,(bp-lgBp)/9*3.2*0.6));
   };
   const bpH=bpAdj(g.homeId),bpA=bpAdj(g.awayId);
-  if(bpH!=null)expAway+=bpH*bpW*scH.bp;
-  if(bpA!=null)expHome+=bpA*bpW*scA.bp;
+  const bpEffH=(bpH!=null)?bpH*bpW*scH.bp:0;
+  const bpEffA=(bpA!=null)?bpA*bpW*scA.bp:0;
+  expAway+=bpEffH;expHome+=bpEffA;
+  FT.bp=bpEffA-bpEffH;
   const pf=PARK_F[g.homeId]||1;
   if(pf!==1){expHome*=pf;expAway*=pf;}
+  FT.wx=0;
   if(Number.isFinite(g.wxTemp)){
     const wxAdj=Math.max(-0.5,Math.min(0.5,0.023*(g.wxTemp-21)));
     expHome+=wxAdj/2;expAway+=wxAdj/2;
+    FT.wx=wxAdj;
   }
+  FT.h2h=0;
   if(g._h2h&&(g._h2h.a+g._h2h.h)>=4){
     const n2=g._h2h.a+g._h2h.h;
     const diff=(g._h2h.h-g._h2h.a)/n2;
     const h2hAdj=Math.max(-0.25,Math.min(0.25,diff*(n2/(n2+12))*0.5));
     expHome+=h2hAdj/2;expAway-=h2hAdj/2;
+    FT.h2h=h2hAdj;
   }
+  FT.bias=0;
   if(teamBias){
     let b=(teamBias[g.home]||0)-(teamBias[g.away]||0);
     b=Math.max(-0.55,Math.min(0.55,b));
     expHome+=b/2;expAway-=b/2;
+    FT.bias=b;
   }
-  return {mPre:expHome-expAway,expHome,expAway,tot:expHome+expAway};
+  FT.luH=+(luH-1).toFixed(3);FT.luA=+(luA-1).toFixed(3);
+  const fArr=[FT.stH,FT.stA,FT.bp,FT.bias,FT.h2h,FT.wx,FT.luH,FT.luA].map(v=>+(v||0).toFixed(2));
+  return {mPre:expHome-expAway,expHome,expAway,tot:expHome+expAway,f:fArr};
 }
 const sigScaleOf=t=>Math.max(.90,Math.min(1.10,Math.pow((t||8.6)/8.6,0.35)));
 function classifyMiss(g,p,K,SIG){
@@ -545,7 +558,7 @@ function classifyMiss(g,p,K,SIG){
         const hit=((p.mPre>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
-          t:+p.tot.toFixed(1),
+          t:+p.tot.toFixed(1),f:p.f,
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
         seen.add(g.id);added++;
       }
