@@ -261,6 +261,38 @@ async function fetchLineupRatio(g,exMap,asOf){
         });
       }catch(e){}
     }
+    const spMap={};
+    if(allIds.length&&asOf){
+      try{
+        const yr2=asOf.slice(0,4);
+        const ds=await jget(`${API}/people?personIds=${allIds.join(',')}&hydrate=stats(group=[hitting],type=[statSplits],sitCodes=[vl,vr],season=${yr2})`);
+        (ds.people||[]).forEach(p=>{
+          const sp=(p.stats||[]).find(s=>s.group?.displayName==='hitting')?.splits||[];
+          const rec={};
+          sp.forEach(s=>{
+            const code=(s.split?.code||s.split?.description||'');
+            const ops=parseFloat(s.stat?.ops),pa=parseInt(s.stat?.plateAppearances);
+            if(!(isFinite(ops)&&isFinite(pa)&&pa>=40))return;
+            if(/vl/i.test(code))rec.vl=ops;else if(/vr/i.test(code))rec.vr=ops;
+          });
+          if(rec.vl||rec.vr)spMap[p.id]=rec;
+        });
+      }catch(e){}
+    }
+    const sideSplit=side=>{
+      const os=(orders[side]||[]);
+      const pack=hand=>{
+        const arr=os.map(o=>{
+          const s2=spMap[o.id];
+          const v=s2?(hand==='L'?s2.vl:s2.vr):null;
+          return (isFinite(v)&&isFinite(o.sOPS)&&o.sOPS>0)?{v,s:o.sOPS}:null;
+        }).filter(Boolean);
+        if(arr.length<6)return null;
+        return arr.reduce((t,x)=>t+x.v,0)/arr.reduce((t,x)=>t+x.s,0);
+      };
+      return {L:pack('L'),R:pack('R')};
+    };
+    const luSp={a:sideSplit('away'),h:sideSplit('home')};
     const eff=o=>{
       if(!(isFinite(o.sOPS)&&o.sOPS>0))return null;
       const r2=recMap[o.id];
@@ -276,7 +308,8 @@ async function fetchLineupRatio(g,exMap,asOf){
     const a=calc('away'),h=calc('home');
     return {
       a:(a&&isFinite(exMap[g.awayId]?.ops)&&exMap[g.awayId].ops>0)?a/exMap[g.awayId].ops:null,
-      h:(h&&isFinite(exMap[g.homeId]?.ops)&&exMap[g.homeId].ops>0)?h/exMap[g.homeId].ops:null
+      h:(h&&isFinite(exMap[g.homeId]?.ops)&&exMap[g.homeId].ops>0)?h/exMap[g.homeId].ops:null,
+      sp:luSp
     };
   }catch(e){return null;}
 }
@@ -336,7 +369,26 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     const ratio=Math.max(.92,Math.min(1.08,1+(sp/ex2.ops-1)*0.6));
     return base*ratio;
   };
-  const hPl=platoon(exH,aSt?.hand,hOff),aPl=platoon(exA,hSt?.hand,aOff);
+  const luPlat=(side,oppHand)=>{
+    const s2=g.luSp&&g.luSp[side];
+    if(!s2||!oppHand)return null;
+    const rr=oppHand==='L'?s2.L:s2.R;
+    if(!isFinite(rr))return null;
+    return Math.max(.92,Math.min(1.08,1+(rr-1)*0.5));
+  };
+  const teamRatio=(ex2,oppHand)=>{
+    if(!ex2||!oppHand)return null;
+    const sp=oppHand==='L'?ex2.vsL:ex2.vsR;
+    if(!(isFinite(sp)&&isFinite(ex2.ops)&&ex2.ops>0))return null;
+    return Math.max(.92,Math.min(1.08,1+(sp/ex2.ops-1)*0.6));
+  };
+  const mixPl=(ex2,oppHand,side,base)=>{
+    const rT=teamRatio(ex2,oppHand),rL=luPlat(side,oppHand);
+    if(rL==null)return platoon(ex2,oppHand,base);
+    const rF=Math.max(.92,Math.min(1.08,(rT||1)*0.4+rL*0.6));
+    return base*rF;
+  };
+  const hPl=mixPl(exH,aSt?.hand,'h',hOff),aPl=mixPl(exA,hSt?.hand,'a',aOff);
   const venMix=(base,split)=>isFinite(split)?base*0.8+split*0.2:base;
   const hOffV=venMix(hPl,exH.homeRSg),aOffV=venMix(aPl,exA.awayRSg);
   const hDefV=venMix(hDef,exH.homeRAg),aDefV=venMix(aDef,exA.awayRAg);
@@ -480,7 +532,7 @@ function classifyMiss(g,p,K,SIG){
         const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)continue;
         if(seen.has(g.id))continue;
         const lu=await fetchLineupRatio(g,ex.map||{},asOf);
-        if(lu){g.luA=lu.a;g.luH=lu.h;}
+        if(lu){g.luA=lu.a;g.luH=lu.h;g.luSp=lu.sp;}
         const wt=await fetchWxTemp(g.homeId,g.ts);
         if(Number.isFinite(wt))g.wxTemp=wt;
         const hh=await fetchH2H(g,season,date);
