@@ -211,6 +211,35 @@ async function fetchH2H(g,season,cutoff){
   }catch(e){h2hCache[key]=null;return null;}
 }
 
+/* ⑰ 打線熟悉度:全隊 vs 該先發生涯合計(重收縮 n/(n+400),封頂±0.15) */
+const famCache={};
+async function fetchFamiliarity(pitId,oppTeamId){
+  if(!pitId||!oppTeamId)return null;
+  const key=pitId+'-'+oppTeamId;
+  if(famCache[key]!==undefined)return famCache[key];
+  try{
+    const d=await jget(`${API}/people/${pitId}/stats?stats=vsTeam,career&group=pitching&opposingTeamId=${oppTeamId}`);
+    let vsAvg=null,vsAb=0,carAvg=null;
+    (d.stats||[]).forEach(s=>{
+      const sp=s.splits||[];
+      if(!sp.length)return;
+      const st=sp[sp.length-1].stat||{};
+      const avg=parseFloat(st.avg),ab=parseInt(st.atBats);
+      if((s.type?.displayName||'').toLowerCase().includes('vsteam')){
+        if(isFinite(avg)&&isFinite(ab)&&ab>=40){vsAvg=avg;vsAb=ab;}
+      }else if((s.type?.displayName||'').toLowerCase().includes('career')){
+        if(isFinite(avg))carAvg=avg;
+      }
+    });
+    let adj=null;
+    if(vsAvg!=null&&carAvg!=null&&carAvg>0){
+      adj=Math.max(-0.15,Math.min(0.15,(vsAvg-carAvg)*3))*(vsAb/(vsAb+400));
+      adj=+adj.toFixed(3);
+    }
+    famCache[key]=adj;return adj;
+  }catch(e){famCache[key]=null;return null;}
+}
+
 /* ⑬ 天氣層(與網頁版一致) */
 const PARK_GEO={144:[33.891,-84.468],110:[39.284,-76.622],111:[42.346,-71.097],
   112:[41.948,-87.655],145:[41.830,-87.634],113:[39.097,-84.507],114:[41.496,-81.685],
@@ -461,6 +490,8 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     FT.wx=wxAdj;
   }
   FT.h2h=0;
+  if(Number.isFinite(g.famA))expAway+=g.famA;
+  if(Number.isFinite(g.famH))expHome+=g.famH;
   if(g._h2h&&(g._h2h.a+g._h2h.h)>=4){
     const n2=g._h2h.a+g._h2h.h;
     const diff=(g._h2h.h-g._h2h.a)/n2;
@@ -552,6 +583,10 @@ function classifyMiss(g,p,K,SIG){
         if(lu){g.luA=lu.a;g.luH=lu.h;g.luSp=lu.sp;}
         const wt=await fetchWxTemp(g.homeId,g.ts);
         if(Number.isFinite(wt))g.wxTemp=wt;
+        const fA=await fetchFamiliarity(g.homePitId,g.awayId);
+        const fH=await fetchFamiliarity(g.awayPitId,g.homeId);
+        if(Number.isFinite(fA))g.famA=fA;
+        if(Number.isFinite(fH))g.famH=fH;
         const hh=await fetchH2H(g,season,date);
         if(hh)g._h2h=hh;
         const p=predict(g,pm,lg,ps,ex2,teamBias,state.tune);if(!p)continue;
