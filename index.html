@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.38 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.40 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1333,10 +1333,9 @@ function favTier(p,actMargin,hit){
   if(!bp)return null;
   const favAct=(p.raw_margin||0)>=0?actMargin:-actMargin;
   if(hit){
-    // 勝隊已中:帶位只在勝格(勝1/勝2/勝3+)內公平對決
-    const wb=[bp[1],bp[2],bp[3]];
-    const wi=wb.indexOf(Math.max(...wb))+1;
-    const bandHit=wi===favBandOf(favAct);
+    // 勝隊已中:全中=實際勝分與預測勝分差距≤1.5(與檢討敘事同一把尺)
+    const mu=Math.abs((p.raw_margin||0)*MARGIN_K);
+    const bandHit=Math.abs(favAct-mu)<=1.5;
     return bandHit?{code:'full',zh:'全中',bandHit}:{code:'winOnly',zh:'中勝隊',bandHit:false};
   }
   const upsetTop=bp.indexOf(Math.max(...bp))===0;
@@ -2877,18 +2876,18 @@ $('calibRun').addEventListener('click',async()=>{
         實際超出預測幅度比例 ${(coverRateOf(samples)*100).toFixed(0)}%(理想≈50%)、
         ${(()=>{
           const T={full:0,winOnly:0,upsetWarned:0,wrong:0};let condHit=0,condN=0;
-          const actCnt=[0,0,0,0];
+          const winMargins=[];
           samples.forEach(x=>{
             if(x.m==null||x.actM==null)return;
             const bp=marginBands(Math.abs(x.m*MARGIN_K));if(!bp)return;
             const winnerHit=(x.m>=0)===x.homeWon;
             const favAct=x.m>=0?x.actM:-x.actM;
             if(winnerHit){
-              const wb=[bp[1],bp[2],bp[3]];
-              const wi=wb.indexOf(Math.max(...wb))+1;
-              const bandHit=wi===favBandOf(favAct);
+              const mu2=Math.abs(x.m*MARGIN_K);
+              const bandHit=Math.abs(favAct-mu2)<=1.5;
               if(bandHit)T.full++;else T.winOnly++;
-              condN++;if(bandHit)condHit++;actCnt[favBandOf(favAct)]++;
+              condN++;if(bandHit)condHit++;
+              winMargins.push(favAct);
             }else{
               const upsetTop=bp.indexOf(Math.max(...bp))===0;
               if(upsetTop)T.upsetWarned++;else T.wrong++;
@@ -2896,13 +2895,19 @@ $('calibRun').addEventListener('click',async()=>{
           });
           const N2=T.full+T.winOnly+T.upsetWarned+T.wrong;
           if(!N2)return '';
-          const base=condN?Math.max(actCnt[1],actCnt[2],actCnt[3])/condN:0;
+          let base=0;
+          if(condN){
+            for(let c2=1;c2<=5;c2++){
+              const b2=winMargins.filter(v=>Math.abs(v-c2)<=1.5).length/condN;
+              if(b2>base)base=b2;
+            }
+          }
           const skill=condN?condHit/condN:0;
-          const vd2=skill>base+0.02?'帶位判斷優於天真基準,分差層有真實技能。'
-            :skill>base-0.02?'帶位判斷與天真基準相當——分差精進空間在此。'
-            :'帶位判斷低於天真基準,落點引擎需檢視。';
+          const vd2=skill>base+0.02?'勝分判斷優於最佳固定猜測——分差層有真實技能。'
+            :skill>base-0.02?'勝分判斷與最佳固定猜測相當,符合 MLB 物理極限。'
+            :'勝分判斷低於固定猜測基準,需檢視。';
           return `勝隊×帶位分辨(${N2} 場):全中 ${T.full}(${(T.full/N2*100).toFixed(0)}%)、中勝隊 ${T.winOnly}(${(T.winOnly/N2*100).toFixed(0)}%)、帶位預警 ${T.upsetWarned}(${(T.upsetWarned/N2*100).toFixed(0)}%)、全錯 ${T.wrong}(${(T.wrong/N2*100).toFixed(0)}%)。
-          <b>分差技能隔離</b>:勝隊猜中時帶位命中 ${(skill*100).toFixed(1)}%(天真基準 ${(base*100).toFixed(1)}%)——${vd2}、`;
+          <b>分差技能隔離</b>:勝隊猜中時勝分誤差≤1.5分佔 ${(skill*100).toFixed(1)}%(最佳固定猜測基準 ${(base*100).toFixed(1)}%)——${vd2}、`;
         })()}
         ${_mgDist&&_mgDist.eval?`勝分差落點校準(${_mgDist.eval.n} 場,預測隊視角):模型平均 敗${(_mgDist.eval.avg[0]*100).toFixed(0)}%/勝1 ${(_mgDist.eval.avg[1]*100).toFixed(0)}%/勝2 ${(_mgDist.eval.avg[2]*100).toFixed(0)}%/勝3+ ${(_mgDist.eval.avg[3]*100).toFixed(0)}% vs 實際 ${(_mgDist.eval.act[0]*100).toFixed(0)}%/${(_mgDist.eval.act[1]*100).toFixed(0)}%/${(_mgDist.eval.act[2]*100).toFixed(0)}%/${(_mgDist.eval.act[3]*100).toFixed(0)}%、最看好帶位命中 ${(_mgDist.eval.topHit*100).toFixed(0)}%${_mgDist.six?`、實測六帶位分布:${FAV_BAND6_ZH.map((z,k)=>`${z} ${(_mgDist.six.emp[k]*100).toFixed(0)}%`).join('/')}`:''}、`:''}
         ${(()=>{
