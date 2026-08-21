@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.40 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.41 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2875,7 +2875,7 @@ $('calibRun').addEventListener('click',async()=>{
         分差命中率(±2分內)<b>${(marginHitOf(samples,2)*100).toFixed(1)}%</b>(±1分:${(marginHitOf(samples,1)*100).toFixed(0)}%、±3分:${(marginHitOf(samples,3)*100).toFixed(0)}%)、
         實際超出預測幅度比例 ${(coverRateOf(samples)*100).toFixed(0)}%(理想≈50%)、
         ${(()=>{
-          const T={full:0,winOnly:0,upsetWarned:0,wrong:0};let condHit=0,condN=0;
+          const T={full:0,winOnly:0,upsetWarned:0,wrong:0};let condHit=0,condN=0,ewHit=0;
           const winMargins=[];
           samples.forEach(x=>{
             if(x.m==null||x.actM==null)return;
@@ -2887,6 +2887,13 @@ $('calibRun').addEventListener('click',async()=>{
               const bandHit=Math.abs(favAct-mu2)<=1.5;
               if(bandHit)T.full++;else T.winOnly++;
               condN++;if(bandHit)condHit++;
+              // 公平版:用「若勝出平均贏」(截尾期望)當猜測
+              const sdE=(_mgDist&&_mgDist.sd)||4.3;
+              const aE=(0.5-mu2)/sdE;
+              const phiE=Math.exp(-aE*aE/2)/Math.sqrt(2*Math.PI);
+              const tailE=1-normCdf(aE);
+              const ewE=tailE>0.02?mu2+sdE*phiE/tailE:mu2;
+              if(Math.abs(favAct-ewE)<=1.5)ewHit++;
               winMargins.push(favAct);
             }else{
               const upsetTop=bp.indexOf(Math.max(...bp))===0;
@@ -2903,11 +2910,12 @@ $('calibRun').addEventListener('click',async()=>{
             }
           }
           const skill=condN?condHit/condN:0;
-          const vd2=skill>base+0.02?'勝分判斷優於最佳固定猜測——分差層有真實技能。'
-            :skill>base-0.02?'勝分判斷與最佳固定猜測相當,符合 MLB 物理極限。'
-            :'勝分判斷低於固定猜測基準,需檢視。';
+          const ewSkill=condN?ewHit/condN:0;
+          const vd2=ewSkill>base+0.02?'「若勝出平均贏」估計優於最佳固定猜測——條件勝分有真實技能。'
+            :ewSkill>base-0.03?'「若勝出平均贏」估計與最佳固定猜測相當——勝分幅度已達物理上限;分差值偏低屬期望值的結構特性,非錯誤。'
+            :'條件勝分估計低於固定猜測,需檢視截尾參數。';
           return `勝隊×帶位分辨(${N2} 場):全中 ${T.full}(${(T.full/N2*100).toFixed(0)}%)、中勝隊 ${T.winOnly}(${(T.winOnly/N2*100).toFixed(0)}%)、帶位預警 ${T.upsetWarned}(${(T.upsetWarned/N2*100).toFixed(0)}%)、全錯 ${T.wrong}(${(T.wrong/N2*100).toFixed(0)}%)。
-          <b>分差技能隔離</b>:勝隊猜中時勝分誤差≤1.5分佔 ${(skill*100).toFixed(1)}%(最佳固定猜測基準 ${(base*100).toFixed(1)}%)——${vd2}、`;
+          <b>分差技能隔離</b>:勝隊猜中時——以分差值猜:誤差≤1.5分佔 ${(skill*100).toFixed(1)}%;以「若勝出平均贏」猜:${(ewSkill*100).toFixed(1)}%(最佳固定猜測基準 ${(base*100).toFixed(1)}%)——${vd2}、`;
         })()}
         ${_mgDist&&_mgDist.eval?`勝分差落點校準(${_mgDist.eval.n} 場,預測隊視角):模型平均 敗${(_mgDist.eval.avg[0]*100).toFixed(0)}%/勝1 ${(_mgDist.eval.avg[1]*100).toFixed(0)}%/勝2 ${(_mgDist.eval.avg[2]*100).toFixed(0)}%/勝3+ ${(_mgDist.eval.avg[3]*100).toFixed(0)}% vs 實際 ${(_mgDist.eval.act[0]*100).toFixed(0)}%/${(_mgDist.eval.act[1]*100).toFixed(0)}%/${(_mgDist.eval.act[2]*100).toFixed(0)}%/${(_mgDist.eval.act[3]*100).toFixed(0)}%、最看好帶位命中 ${(_mgDist.eval.topHit*100).toFixed(0)}%${_mgDist.six?`、實測六帶位分布:${FAV_BAND6_ZH.map((z,k)=>`${z} ${(_mgDist.six.emp[k]*100).toFixed(0)}%`).join('/')}`:''}、`:''}
         ${(()=>{
