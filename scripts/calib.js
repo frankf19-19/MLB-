@@ -625,8 +625,23 @@ function classifyMiss(g,p,K,SIG){
     const errs=sub.map(x=>Math.abs(x.am-x.m*state.k));
     const e=errs.reduce((a,b)=>a+b,0)/errs.length;
     const h2=errs.filter(v=>v<=2).length/errs.length;
+    // 帶位:實際 1/2/3+ 分布 + 帶位命中(|實際勝分-預測勝分|≤1.5,勝隊對時)
+    let b1=0,b2=0,b3=0,bhHit=0,bhN=0;
+    sub.forEach(x=>{
+      const a=Math.abs(x.am);
+      if(a===1)b1++;else if(a===2)b2++;else b3++;
+      const winnerOk=(x.m>=0)===(x.am>0);
+      if(winnerOk){
+        bhN++;
+        const favAct=x.m>=0?x.am:-x.am;
+        if(Math.abs(favAct-Math.abs(x.m*state.k))<=1.5)bhHit++;
+      }
+    });
     state.hist.push({d:today,s:state.sigma,k:state.k,
-      hit:+(hit*100).toFixed(1),e:+e.toFixed(2),h2:+(h2*100).toFixed(1),n:sub.length});
+      hit:+(hit*100).toFixed(1),e:+e.toFixed(2),h2:+(h2*100).toFixed(1),
+      b1:+(b1/sub.length*100).toFixed(1),b2:+(b2/sub.length*100).toFixed(1),b3:+(b3/sub.length*100).toFixed(1),
+      bh:bhN?+(bhHit/bhN*100).toFixed(1):null,
+      n:sub.length});
     while(state.hist.length>120)state.hist.shift();
     console.log(`擬合完成(${sub.length} 場/${FIT_DAYS}天):K=${state.k} σ=${state.sigma} 命中 ${(hit*100).toFixed(1)}% 分差誤差 ${e.toFixed(2)} ±2命中 ${(h2*100).toFixed(1)}%`);
   }else{
