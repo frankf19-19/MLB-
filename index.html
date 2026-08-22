@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.47 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.48 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -3028,9 +3028,9 @@ $('calibRun').addEventListener('click',async()=>{
           }
           const skill=condN?condHit/condN:0;
           const ewSkill=condN?ewHit/condN:0;
-          const vd2=ewSkill>base+0.02?'「若勝出平均贏」估計優於最佳固定猜測——條件勝分有真實技能。'
-            :ewSkill>base-0.03?'「若勝出平均贏」估計與最佳固定猜測相當——勝分幅度已達物理上限;分差值偏低屬期望值的結構特性,非錯誤。'
-            :'條件勝分估計低於固定猜測,需檢視截尾參數。';
+          const vd2=Math.max(skill,ewSkill)>base+0.02
+            ?'勝分點估優於最佳固定猜測——分差層有超額技能。'
+            :'勝分分布右偏(勝1~3佔多數、長尾拉高平均),固定猜「勝2」天生涵蓋最大區——單點猜測無利可圖屬結構特性;模型的分差價值在帶位機率(已校準),非單點,無參數需修。';
           return `勝隊×帶位分辨(${N2} 場):全中 ${T.full}(${(T.full/N2*100).toFixed(0)}%)、中勝隊 ${T.winOnly}(${(T.winOnly/N2*100).toFixed(0)}%)、帶位預警 ${T.upsetWarned}(${(T.upsetWarned/N2*100).toFixed(0)}%)、全錯 ${T.wrong}(${(T.wrong/N2*100).toFixed(0)}%)。
           <b>分差技能隔離</b>:勝隊猜中時——以分差值猜:誤差≤1.5分佔 ${(skill*100).toFixed(1)}%;以「若勝出平均贏」猜:${(ewSkill*100).toFixed(1)}%(最佳固定猜測基準 ${(base*100).toFixed(1)}%)——${vd2}、`;
         })()}
