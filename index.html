@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.48 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.49 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2774,8 +2774,8 @@ function renderCalibHist(){
     html+=`<div class="pos-group" style="margin-top:14px">校準履歷</div>
       <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;margin-bottom:8px"><canvas id="calibChart" height="150"></canvas></div>
       <div class="table-wrap"><table class="stat" style="min-width:400px">
-      <tr><th>日期</th><th>σ</th><th>K</th><th>近30天命中</th><th>分差誤差</th><th>分差±2命中</th><th>樣本</th></tr>
-      ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.e!=null?r.e.toFixed(2):'-'}</td><td>${r.h2!=null?r.h2+'%':'-'}</td><td>${r.n}</td></tr>`).join('')}
+      <tr><th>日期</th><th>σ</th><th>K</th><th>近30天命中</th><th>分差誤差</th><th>分差±2命中</th><th>實際1分</th><th>實際2分</th><th>實際3+</th><th>帶位命中</th><th>樣本</th></tr>
+      ${h.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.s.toFixed(2)}</td><td>${r.k!=null?r.k.toFixed(2):'-'}</td><td>${r.hit}%</td><td>${r.e!=null?r.e.toFixed(2):'-'}</td><td>${r.h2!=null?r.h2+'%':'-'}</td><td>${r.b1!=null?r.b1+'%':'-'}</td><td>${r.b2!=null?r.b2+'%':'-'}</td><td>${r.b3!=null?r.b3+'%':'-'}</td><td>${r.bh!=null?r.bh+'%':'-'}</td><td>${r.n}</td></tr>`).join('')}
       </table></div>`;
   }
   el.innerHTML=html;
@@ -2791,7 +2791,8 @@ function renderCalibHist(){
         {label:'σ',data:hh.map(r=>r.s),borderColor:teal,backgroundColor:teal,tension:.3,yAxisID:'y1'},
         {label:'K',data:hh.map(r=>r.k),borderColor:muted,backgroundColor:muted,borderDash:[4,3],tension:.3,yAxisID:'y1'},
         {label:'分差誤差',data:hh.map(r=>r.e??null),borderColor:'#e0635c',backgroundColor:'#e0635c',tension:.3,yAxisID:'y1'},
-        {label:'分差±2命中%',data:hh.map(r=>r.h2??null),borderColor:teal,backgroundColor:teal,borderDash:[5,4],tension:.3,yAxisID:'y'}
+        {label:'分差±2命中%',data:hh.map(r=>r.h2??null),borderColor:teal,backgroundColor:teal,borderDash:[5,4],tension:.3,yAxisID:'y'},
+        {label:'帶位命中%',data:hh.map(r=>r.bh??null),borderColor:'#b58cf0',backgroundColor:'#b58cf0',borderDash:[2,3],tension:.3,yAxisID:'y'}
       ]},
       options:{responsive:true,interaction:{mode:'index',intersect:false},
         plugins:{legend:{labels:{color:muted,font:{size:11},boxWidth:12}}},
