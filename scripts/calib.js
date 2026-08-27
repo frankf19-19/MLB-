@@ -634,7 +634,10 @@ function classifyMiss(g,p,K,SIG){
       if(winnerOk){
         bhN++;
         const favAct=x.m>=0?x.am:-x.am;
-        if(Math.abs(favAct-Math.abs(x.m*state.k))<=1.5)bhHit++;
+        const mu2=Math.abs(x.m*state.k);
+        const pb=mu2<1.5?1:(mu2<2.5?2:3);
+        const ab2=favAct===1?1:(favAct===2?2:3);
+        if(pb===ab2)bhHit++;
       }
     });
     state.hist.push({d:today,s:state.sigma,k:state.k,
