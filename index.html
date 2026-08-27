@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.49 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.50 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1461,6 +1461,70 @@ function diamondSvg(on1,on2,on3){
     <rect x="30" y="15" width="10" height="10" transform="rotate(45 35 20)" fill="${c(on1)}"/>
   </svg>`;
 }
+/* ⭐ 今日焦點球員:全壘打王/OPS王/今日最強先發(自動星探) */
+const spotCache={};
+async function buildSpotlight(games,ps){
+  const day=etToday();
+  if(spotCache[day]!==undefined)return spotCache[day];
+  const teamIds=new Set(games.flatMap(g=>[g.awayId,g.homeId]));
+  const oppOf=id=>{
+    const g=games.find(g2=>g2.awayId===id||g2.homeId===id);
+    if(!g)return '';
+    return g.awayId===id?(TEAM_ID[g.homeId]?.ab||''):(TEAM_ID[g.awayId]?.ab||'');
+  };
+  const season=+day.slice(0,4);
+  const picks=[];
+  const used=new Set();
+  const leader=async(sortStat,tag,line)=>{
+    try{
+      const d=await jget(`${API}/stats?stats=season&group=hitting&season=${season}&sportId=1&limit=40&sortStat=${sortStat}&playerPool=qualified`);
+      const sp=((d.stats||[])[0]?.splits)||[];
+      for(const s of sp){
+        const pid=s.player?.id,tid=s.team?.id;
+        if(!pid||used.has(pid)||!teamIds.has(tid))continue;
+        used.add(pid);
+        const st=s.stat||{};
+        picks.push({pid,name:s.player.fullName,team:TEAM_ID[tid]?.ab||'',opp:oppOf(tid),tag,
+          intro:line(st)});
+        return;
+      }
+    }catch(e){}
+  };
+  await leader('homeRuns','全壘打領袖',st=>`${st.homeRuns} 轟·${st.rbi} 打點·OPS ${st.ops}——本季轟炸榜前緣,今日出戰`);
+  await leader('onBasePlusSlugging','OPS 王者',st=>`打擊率 ${st.avg}·OPS ${st.ops}·${st.homeRuns} 轟——全聯盟最恐怖打者之一,今日出戰`);
+  // 今日最強先發(用已抓的 ps)
+  let bestP=null;
+  games.forEach(g=>{
+    [[g.awayPitId,g.awayPit,g.homeId],[g.homePitId,g.homePit,g.awayId]].forEach(([pid,nm,oppId])=>{
+      const st=pid&&ps?ps[pid]:null;
+      if(!st||!(st.ip>=80)||used.has(pid))return;
+      if(!bestP||st.seasonEra<bestP.era)bestP={pid,name:nm||'',era:st.seasonEra,ip:st.ip,
+        w:st.w,l:st.l,opp:TEAM_ID[oppId]?.ab||''};
+    });
+  });
+  if(bestP&&Number.isFinite(bestP.era)){
+    used.add(bestP.pid);
+    picks.push({pid:bestP.pid,name:bestP.name,team:'',opp:bestP.opp,tag:'今日最強先發',
+      intro:`${bestP.w!=null?bestP.w+'-'+bestP.l+'·':''}ERA ${bestP.era.toFixed(2)}·${bestP.ip.toFixed(0)} 局——今日全聯盟防禦率最佳的先發,登板對決`});
+  }
+  if(!picks.length){spotCache[day]='';return '';}
+  const cards=picks.slice(0,3).map(p=>`
+    <div style="display:flex;gap:10px;align-items:center;min-width:230px;flex:1;background:var(--wash);border:1px solid var(--line);border-radius:12px;padding:9px 12px">
+      <img src="${headshot(p.pid,96)}" referrerpolicy="no-referrer" alt="" loading="lazy"
+        style="width:48px;height:48px;border-radius:50%;object-fit:cover;background:var(--wash2)">
+      <div style="min-width:0">
+        <div><span class="pnm" data-pid="${p.pid}" style="cursor:pointer;font-weight:800">${esc(p.name)}</span>
+          ${p.team?`<span class="tag" style="margin-left:6px">${esc(p.team)}</span>`:''}
+          <span style="font-size:11px;font-weight:800;color:var(--amber);margin-left:6px">${esc(p.tag)}</span></div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${esc(p.intro)} ${esc(p.opp)}</div>
+      </div>
+    </div>`).join('');
+  const out=`<div class="analysis" style="grid-column:1/-1;height:auto;border-left-color:var(--teal);margin-bottom:6px">
+    <span class="k" style="color:var(--teal)">⭐ 今日焦點球員</span>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${cards}</div>
+  </div>`;
+  spotCache[day]=out;return out;
+}
 function gameCard(g,p,rv){
   const hp=Math.round(p.home_prob*100),ap=100-hp;
   const hasScore=p.home_score_pred!=null, isFinal=g.status==='Final', isLive=g.status==='Live';
@@ -1663,6 +1727,10 @@ async function loadDay(quiet){
       }
     });
     // 🎯 本日焦點:模型最有把握的場次(誠實版大膽:把握大的大聲說)
+    let spotHtml='';
+    if(date===etToday()){
+      try{spotHtml=await buildSpotlight(games,ps);}catch(e){}
+    }
     let focusHtml='';
     const top=focusArr.filter(x=>x.conf>=0.60).sort((a,b)=>b.conf-a.conf).slice(0,3);
     if(top.length){
@@ -1672,7 +1740,7 @@ async function loadDay(quiet){
         ${top[0].conf>=0.68?' — 今日有高信心場次,值得關注。':''}
       </div>`;
     }
-    $('games').innerHTML=(focusHtml+html)||`<div class="empty">${date} 沒有排定的比賽(可能是明星賽或休兵日)。</div>`;
+    $('games').innerHTML=(spotHtml+focusHtml+html)||`<div class="empty">${date} 沒有排定的比賽(可能是明星賽或休兵日)。</div>`;
     const _md=s=>s.slice(5).replace('-','/');
     $('listTitle').textContent=`${date} 比賽`;
     $('listTag2')&&0; // noop
@@ -1700,6 +1768,7 @@ async function loadDay(quiet){
     bindTeamClicks();
     loadTransactions(date);
     fillH2H(games);
+    bindPlayerClicks($('games'));
     enrichMissAutopsy(games).catch(()=>{});
     updateFavToday(games,date);
     const summary=buildDailySummary(date,games,curPreds,reviews,{hits,errSum,errN});
