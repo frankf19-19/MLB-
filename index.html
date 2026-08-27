@@ -625,7 +625,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.50 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.51 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -924,6 +924,8 @@ function favBandRaw6(mu,sd){
 const favBand6Of=fa=>fa<=-3?0:(fa===-2?1:(fa===-1?2:(fa===1?3:(fa===2?4:5))));
 const FAV_BAND6_ZH=['敗3+','敗2','敗1','勝1','勝2','勝3+'];
 const favBandOf=fa=>fa<0?0:(fa===1?1:(fa===2?2:3));
+const predBandOf=mu=>mu<1.5?1:(mu<2.5?2:3);
+const BAND_TXT=['敗','勝1','勝2','勝3+'];
 const FAV_BAND_ZH=['爆冷敗','勝1分','勝2分','勝3+分'];
 function computeMarginDist(){
   const L=ledger().filter(x=>x.m!=null&&x.am!=null);
@@ -1374,9 +1376,9 @@ function favTier(p,actMargin,hit){
   if(!bp)return null;
   const favAct=(p.raw_margin||0)>=0?actMargin:-actMargin;
   if(hit){
-    // 勝隊已中:全中=實際勝分與預測勝分差距≤1.5(與檢討敘事同一把尺)
+    // 勝隊已中:全中=帶位精確相等(預測宣告 vs 實際帶位)
     const mu=Math.abs((p.raw_margin||0)*MARGIN_K);
-    const bandHit=Math.abs(favAct-mu)<=1.5;
+    const bandHit=predBandOf(mu)===favBandOf(favAct);
     return bandHit?{code:'full',zh:'全中',bandHit}:{code:'winOnly',zh:'中勝隊',bandHit:false};
   }
   const upsetTop=bp.indexOf(Math.max(...bp))===0;
@@ -1394,7 +1396,9 @@ function bandReview(p,actMargin){
   if(b6){
     const i6=favBand6Of(favAct);
     const lab6=i6<=2?`【${FAV_BAND6_ZH[i6]}】(遭爆冷輸 ${Math.abs(favAct)} 分)`:`【${FAV_BAND6_ZH[i6]}】`;
-    return `勝分差落點(六帶位):預測隊實際${lab6},模型賽前 ${FAV_BAND6_ZH.map((z,k)=>`${z} ${(b6[k]*100).toFixed(0)}%`).join('/')},實際落格賽前機率 ${(b6[i6]*100).toFixed(0)}%${hitBand?'(四帶位最看好命中✓)':''}。`;
+    const mu3=Math.abs((p.raw_margin||0)*MARGIN_K);
+    const call=(i6>=3)?`帶位判定:預測【${BAND_TXT[predBandOf(mu3)]}】(分差 ${mu3.toFixed(1)}),實際【${BAND_TXT[favBandOf(favAct)]}】${predBandOf(mu3)===favBandOf(favAct)?'✓ 精確命中':'✗'}。`:'';
+    return `${call}勝分差落點(六帶位):預測隊實際${lab6},模型賽前 ${FAV_BAND6_ZH.map((z,k)=>`${z} ${(b6[k]*100).toFixed(0)}%`).join('/')},實際落格賽前機率 ${(b6[i6]*100).toFixed(0)}%。`;
   }
   const lab=idx===0?`遭爆冷(輸 ${Math.abs(favAct)} 分)`:FAV_BAND_ZH[idx];
   return `勝分差落點:預測隊實際${lab},模型賽前給 敗${(bp[0]*100).toFixed(0)}%/勝1分${(bp[1]*100).toFixed(0)}%/勝2分${(bp[2]*100).toFixed(0)}%/勝3+${(bp[3]*100).toFixed(0)}%${hitBand?'(最看好帶位命中✓)':''}。`;
@@ -3062,8 +3066,9 @@ $('calibRun').addEventListener('click',async()=>{
         分差命中率(±2分內)<b>${(marginHitOf(samples,2)*100).toFixed(1)}%</b>(±1分:${(marginHitOf(samples,1)*100).toFixed(0)}%、±3分:${(marginHitOf(samples,3)*100).toFixed(0)}%)、
         實際超出預測幅度比例 ${(coverRateOf(samples)*100).toFixed(0)}%(理想≈50%)、
         ${(()=>{
-          const T={full:0,winOnly:0,upsetWarned:0,wrong:0};let condHit=0,condN=0,ewHit=0;
-          const winMargins=[];
+          const T={full:0,winOnly:0,upsetWarned:0,wrong:0};let condHit=0,condN=0;
+          const CB={1:{n:0,h:0},2:{n:0,h:0},3:{n:0,h:0}};
+          const actB={1:0,2:0,3:0};
           samples.forEach(x=>{
             if(x.m==null||x.actM==null)return;
             const bp=marginBands(Math.abs(x.m*MARGIN_K));if(!bp)return;
@@ -3071,17 +3076,12 @@ $('calibRun').addEventListener('click',async()=>{
             const favAct=x.m>=0?x.actM:-x.actM;
             if(winnerHit){
               const mu2=Math.abs(x.m*MARGIN_K);
-              const bandHit=Math.abs(favAct-mu2)<=1.5;
+              const pb=predBandOf(mu2),ab2=favBandOf(favAct);
+              const bandHit=pb===ab2;
               if(bandHit)T.full++;else T.winOnly++;
               condN++;if(bandHit)condHit++;
-              // 公平版:用「若勝出平均贏」(截尾期望)當猜測
-              const sdE=(_mgDist&&_mgDist.sd)||4.3;
-              const aE=(0.5-mu2)/sdE;
-              const phiE=Math.exp(-aE*aE/2)/Math.sqrt(2*Math.PI);
-              const tailE=1-normCdf(aE);
-              const ewE=tailE>0.02?mu2+sdE*phiE/tailE:mu2;
-              if(Math.abs(favAct-ewE)<=1.5)ewHit++;
-              winMargins.push(favAct);
+              CB[pb].n++;if(bandHit)CB[pb].h++;
+              actB[ab2]++;
             }else{
               const upsetTop=bp.indexOf(Math.max(...bp))===0;
               if(upsetTop)T.upsetWarned++;else T.wrong++;
@@ -3089,20 +3089,14 @@ $('calibRun').addEventListener('click',async()=>{
           });
           const N2=T.full+T.winOnly+T.upsetWarned+T.wrong;
           if(!N2)return '';
-          let base=0;
-          if(condN){
-            for(let c2=1;c2<=5;c2++){
-              const b2=winMargins.filter(v=>Math.abs(v-c2)<=1.5).length/condN;
-              if(b2>base)base=b2;
-            }
-          }
+          const base=condN?Math.max(actB[1],actB[2],actB[3])/condN:0;
           const skill=condN?condHit/condN:0;
-          const ewSkill=condN?ewHit/condN:0;
-          const vd2=Math.max(skill,ewSkill)>base+0.02
-            ?'勝分點估優於最佳固定猜測——分差層有超額技能。'
-            :'勝分分布右偏(勝1~3佔多數、長尾拉高平均),固定猜「勝2」天生涵蓋最大區——單點猜測無利可圖屬結構特性;模型的分差價值在帶位機率(已校準),非單點,無參數需修。';
+          const vd2=skill>base+0.02
+            ?'帶位點名優於全押勝3+基準——分差層有超額技能。'
+            :'帶位精確點名未超越全押勝3+(勝出幅度與賽前強弱幾乎無關的結構使然);判讀重點看下行各帶位成績單。';
           return `勝隊×帶位分辨(${N2} 場):全中 ${T.full}(${(T.full/N2*100).toFixed(0)}%)、中勝隊 ${T.winOnly}(${(T.winOnly/N2*100).toFixed(0)}%)、帶位預警 ${T.upsetWarned}(${(T.upsetWarned/N2*100).toFixed(0)}%)、全錯 ${T.wrong}(${(T.wrong/N2*100).toFixed(0)}%)。
-          <b>分差技能隔離</b>:勝隊猜中時——以分差值猜:誤差≤1.5分佔 ${(skill*100).toFixed(1)}%;以「若勝出平均贏」猜:${(ewSkill*100).toFixed(1)}%(最佳固定猜測基準 ${(base*100).toFixed(1)}%)——${vd2}、`;
+          <b>帶位精確命中</b>(勝隊猜中時,預測帶位=實際帶位):${(skill*100).toFixed(1)}%(全押勝3+基準 ${(base*100).toFixed(1)}%)——${vd2}<br>
+          <b>各帶位點名成績單</b>:${[1,2,3].map(b2=>`預測${BAND_TXT[b2]}(${CB[b2].n}場):中 ${CB[b2].n?(CB[b2].h/CB[b2].n*100).toFixed(0):0}%`).join('、')}、`;
         })()}
         ${_mgDist&&_mgDist.eval?`勝分差落點校準(${_mgDist.eval.n} 場,預測隊視角):模型平均 敗${(_mgDist.eval.avg[0]*100).toFixed(0)}%/勝1 ${(_mgDist.eval.avg[1]*100).toFixed(0)}%/勝2 ${(_mgDist.eval.avg[2]*100).toFixed(0)}%/勝3+ ${(_mgDist.eval.avg[3]*100).toFixed(0)}% vs 實際 ${(_mgDist.eval.act[0]*100).toFixed(0)}%/${(_mgDist.eval.act[1]*100).toFixed(0)}%/${(_mgDist.eval.act[2]*100).toFixed(0)}%/${(_mgDist.eval.act[3]*100).toFixed(0)}%、最看好帶位命中 ${(_mgDist.eval.topHit*100).toFixed(0)}%${_mgDist.six?`、實測六帶位分布:${FAV_BAND6_ZH.map((z,k)=>`${z} ${(_mgDist.six.emp[k]*100).toFixed(0)}%`).join('/')}`:''}、`:''}
         ${(()=>{
