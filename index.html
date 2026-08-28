@@ -166,6 +166,16 @@
   .pill.wait{background:rgba(130,153,172,.14);color:var(--muted);border:1px solid var(--line)}
   .meta{color:var(--muted);font-size:12.5px;font-family:var(--mono);margin-top:2px}
   .scorepred b{color:var(--teal);font-family:var(--mono)}
+  .predchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .mchip{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;
+    background:var(--wash);border:1px solid var(--line);border-radius:8px;
+    padding:2.5px 8px;font-size:12px;color:var(--muted)}
+  .mchip b{font-size:12.5px}
+  .mchip i{font-style:normal;font-size:10.5px;opacity:.75}
+  .bandchip b{color:var(--ink2)}
+  .pickchip{background:color-mix(in srgb,var(--teal) 9%,transparent);border-color:color-mix(in srgb,var(--teal) 30%,transparent)}
+  .review{line-height:1.75}
+  .review .k{display:inline-block;margin-bottom:3px}
   .prob{margin-top:12px}
   .prob-bar{height:8px;border-radius:5px;overflow:hidden;background:var(--wash);display:flex}
   .prob-bar .away{background:var(--teal);opacity:.55} .prob-bar .home{background:var(--teal)}
@@ -401,6 +411,13 @@
   .theme-b:hover{transform:translateY(-2px) scale(1.08)}
 
   @media(max-width:640px){
+    .mchip{font-size:11px;padding:2px 6.5px}
+    .mchip b{font-size:11.5px}
+    .predchips{gap:4px}
+    .analysis{height:auto}
+    .review{font-size:12.5px}
+    .stat th,.stat td{padding:4.5px 7px;font-size:11.5px}
+    .spotrow>div{min-width:100% !important}
     header,.game,.datebar,.analysis,.headline,.player,.pd-head,.gd-score,.table-wrap,.feed,.zone-box,.empty{
       backdrop-filter:blur(6px) saturate(1.1);-webkit-backdrop-filter:blur(6px) saturate(1.1)}
   }
@@ -625,7 +642,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.51 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.52 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1398,7 +1415,7 @@ function bandReview(p,actMargin){
     const lab6=i6<=2?`【${FAV_BAND6_ZH[i6]}】(遭爆冷輸 ${Math.abs(favAct)} 分)`:`【${FAV_BAND6_ZH[i6]}】`;
     const mu3=Math.abs((p.raw_margin||0)*MARGIN_K);
     const call=(i6>=3)?`帶位判定:預測【${BAND_TXT[predBandOf(mu3)]}】(分差 ${mu3.toFixed(1)}),實際【${BAND_TXT[favBandOf(favAct)]}】${predBandOf(mu3)===favBandOf(favAct)?'✓ 精確命中':'✗'}。`:'';
-    return `${call}勝分差落點(六帶位):預測隊實際${lab6},模型賽前 ${FAV_BAND6_ZH.map((z,k)=>`${z} ${(b6[k]*100).toFixed(0)}%`).join('/')},實際落格賽前機率 ${(b6[i6]*100).toFixed(0)}%。`;
+    return `${call}${call?'<br>':''}勝分差落點(六帶位):預測隊實際${lab6},模型賽前 ${FAV_BAND6_ZH.map((z,k)=>`${z} ${(b6[k]*100).toFixed(0)}%`).join('/')},實際落格賽前機率 ${(b6[i6]*100).toFixed(0)}%。`;
   }
   const lab=idx===0?`遭爆冷(輸 ${Math.abs(favAct)} 分)`:FAV_BAND_ZH[idx];
   return `勝分差落點:預測隊實際${lab},模型賽前給 敗${(bp[0]*100).toFixed(0)}%/勝1分${(bp[1]*100).toFixed(0)}%/勝2分${(bp[2]*100).toFixed(0)}%/勝3+${(bp[3]*100).toFixed(0)}%${hitBand?'(最看好帶位命中✓)':''}。`;
@@ -1525,7 +1542,7 @@ async function buildSpotlight(games,ps){
     </div>`).join('');
   const out=`<div class="analysis" style="grid-column:1/-1;height:auto;border-left-color:var(--teal);margin-bottom:6px">
     <span class="k" style="color:var(--teal)">⭐ 今日焦點球員</span>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${cards}</div>
+    <div class="spotrow" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${cards}</div>
   </div>`;
   spotCache[day]=out;return out;
 }
@@ -1577,18 +1594,18 @@ function gameCard(g,p,rv){
       <div class="basestate">${diamondSvg(g.on1,g.on2,g.on3)}<span class="outs"><b>${g.outs??0}</b> 出局</span></div>
     </div>`:'';
   const predLine=hasScore
-    ?`<div class="meta scorepred">預期比分 <b>${p.exp_away!=null?p.exp_away.toFixed(1):p.away_score_pred}–${p.exp_home!=null?p.exp_home.toFixed(1):p.home_score_pred}</b>(客–主)${(()=>{
+    ?`<div class="meta scorepred predchips"><span class="mchip">預期比分 <b>${p.exp_away!=null?p.exp_away.toFixed(1):p.away_score_pred}–${p.exp_home!=null?p.exp_home.toFixed(1):p.home_score_pred}</b><i>客–主</i></span>${(()=>{
       const mu=Math.abs((p.raw_margin||0)*MARGIN_K);
       const sd=((_mgDist&&_mgDist.sd)||3.8)*(p.sig_scale||1);
       const a=(0.5-mu)/sd;
       const phi=Math.exp(-a*a/2)/Math.sqrt(2*Math.PI);
       const tail=1-normCdf(a);
       const ew=tail>0.02?mu+sd*phi/tail:mu;
-      return ` · 若勝出平均贏 <b>${ew.toFixed(1)}</b> 分`;
-    })()} · 分差 <b>${r1(p.margin)}</b> · 總分期望 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b>${(()=>{
+      return `<span class="mchip">若勝平均贏 <b>${ew.toFixed(1)}</b> 分</span>`;
+    })()}<span class="mchip">分差 <b>${r1(p.margin)}</b></span><span class="mchip">總分 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b></span>${(()=>{
       const b=marginBands(p.raw_margin!=null?Math.abs(p.raw_margin*MARGIN_K):null,p.sig_scale);
-      return b?` · 預測隊落點 爆冷敗${(b[0]*100).toFixed(0)}%·勝1分${(b[1]*100).toFixed(0)}%·勝2分${(b[2]*100).toFixed(0)}%·勝3+${(b[3]*100).toFixed(0)}%`:'';
-    })()} · 預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝(${Math.max(hp,ap)}%)${(()=>{
+      return b?`<span class="mchip bandchip">落點 <b>敗${(b[0]*100).toFixed(0)}</b>·<b>勝1 ${(b[1]*100).toFixed(0)}</b>·<b>勝2 ${(b[2]*100).toFixed(0)}</b>·<b>3+ ${(b[3]*100).toFixed(0)}%</b></span>`:'';
+    })()}<span class="mchip pickchip">預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝 <b>${Math.max(hp,ap)}%</b></span>${(()=>{
       const mAbs=Math.abs((p.raw_margin||0)*MARGIN_K);
       let tier,color;
       if(mAbs<0.4){tier='均勢';color='var(--muted)';}
