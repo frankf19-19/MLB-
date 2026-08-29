@@ -1,0 +1,25 @@
+{
+  "name": "MLB 預測計分板",
+  "short_name": "MLB預測",
+  "description": "免金鑰 MLB 預測與賽況追蹤,17 層模型每日雲端自我校準",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c1a2b",
+  "theme_color": "#0c1a2b",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
