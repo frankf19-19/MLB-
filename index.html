@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.54 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.55 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1567,6 +1567,7 @@ function gameCard(g,p,rv){
     const era=info?(info.seasonEra??info.era):null;
     const rec=(info&&info.w!=null)?`${info.w}-${info.l??0}·`:'';
     const stat=(era!=null)?` <span class="pstat">(${rec}ERA ${era.toFixed(2)})</span>`:'';
+    if(id)return `<span class="pnm" data-pid="${id}" style="cursor:pointer">${esc(name)}</span>${stat}`;
     return (id?`<span class="plink" data-pid="${id}">${esc(name)}</span>`:esc(name))+stat;
   };
   const pitSeg=(g.awayPit||g.homePit)?`${pitHtml(g.awayPit,g.awayPitId,g.aPitInfo)} vs ${pitHtml(g.homePit,g.homePitId,g.hPitInfo)}`:null;
@@ -1944,8 +1945,8 @@ async function fetchPtip(pid){
 function initPtip(){
   if(!matchMedia('(hover: hover)').matches)return; // 觸控裝置不啟用
   document.addEventListener('mouseover',e=>{
-    const t=e.target.closest('.pnm[data-pid]');
-    if(!t)return;
+    const t=e.target.closest('[data-pid]');
+    if(!t||!t.dataset.pid)return;
     const pid=t.dataset.pid;
     clearTimeout(_ptipTimer);
     _ptipTimer=setTimeout(async()=>{
@@ -1963,7 +1964,7 @@ function initPtip(){
     },250);
   });
   document.addEventListener('mouseout',e=>{
-    if(e.target.closest&&e.target.closest('.pnm[data-pid]')){
+    if(e.target.closest&&e.target.closest('[data-pid]')){
       clearTimeout(_ptipTimer);_ptipPid=null;
       const el=document.getElementById('ptip');
       if(el)el.classList.remove('on');
@@ -2369,7 +2370,7 @@ async function bvpScout(box,pAway,pHome){
         return `<td style="${hot?'color:var(--teal);font-weight:700':(cold?'color:var(--miss)':'')}">${d2.hh}-${d2.ab}<br><span style="font-size:11px">${avg}${d2.hr?'·'+d2.hr+'轟':''}</span></td>`;
       }));
       const seat=ri<=order.length?String(ri):'替';
-      rows.push(`<tr><td>${seat}</td><td style="text-align:left">${esc(nm)}</td>${cells.join('')}</tr>`);
+      rows.push(`<tr><td>${seat}</td><td style="text-align:left"><span class="pnm" data-pid="${bid}" style="cursor:pointer">${esc(nm)}</span></td>${cells.join('')}</tr>`);
     }
     const head=ps.map(p=>`<th>${esc((p.name||'').split(' ').pop())}<br><span style="font-size:10.5px;color:var(--muted)">${p.tag}</span></th>`).join('');
     return `<div class="pos-group">${esc(t.team?.name||'')} 全隊打者 vs ${esc(box.teams?.[opp]?.team?.name||'對方')} 投手群(生涯對戰)</div>
