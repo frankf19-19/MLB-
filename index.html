@@ -177,6 +177,15 @@
   .bandchip b{color:var(--ink2)}
   .pickchip{background:color-mix(in srgb,var(--teal) 9%,transparent);border-color:color-mix(in srgb,var(--teal) 30%,transparent)}
   .review{line-height:1.75}
+  #ptip{position:fixed;z-index:9999;max-width:270px;background:var(--panel,#14283d);
+    border:1px solid var(--line);border-radius:12px;padding:9px 12px;
+    box-shadow:0 8px 28px rgba(0,0,0,.35);font-size:12.5px;line-height:1.6;
+    pointer-events:none;opacity:0;transform:translateY(4px);
+    transition:opacity .15s,transform .15s}
+  #ptip.on{opacity:1;transform:none}
+  #ptip .tnm{font-weight:800;font-size:13px;margin-bottom:2px}
+  #ptip .trow{color:var(--muted)}
+  #ptip .trow b{color:var(--teal);font-family:var(--mono)}
   .review .k{display:inline-block;margin-bottom:3px}
   .prob{margin-top:12px}
   .prob-bar{height:8px;border-radius:5px;overflow:hidden;background:var(--wash);display:flex}
@@ -644,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.53 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.54 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1898,6 +1907,71 @@ function teamLogo(id,size){
     <span style="display:none">${teamCrest(id,s)}</span>
   </span>`;
 }
+/* 🖱 球員懸停情報卡:滑到名字即顯示本季數據(不跳頁) */
+const _ptipCache={};
+let _ptipTimer=null,_ptipPid=null;
+function ensurePtip(){
+  let el=document.getElementById('ptip');
+  if(!el){el=document.createElement('div');el.id='ptip';document.body.appendChild(el);}
+  return el;
+}
+function positionPtip(el,x,y){
+  const pad=14,W=el.offsetWidth||260,H=el.offsetHeight||80;
+  let L=x+pad,T=y+pad;
+  if(L+W>innerWidth-8)L=x-W-pad;
+  if(T+H>innerHeight-8)T=y-H-pad;
+  el.style.left=Math.max(8,L)+'px';el.style.top=Math.max(8,T)+'px';
+}
+async function fetchPtip(pid){
+  if(_ptipCache[pid])return _ptipCache[pid];
+  const yr=etToday().slice(0,4);
+  const d=await jget(`${API}/people/${pid}?hydrate=stats(group=[hitting,pitching],type=[season],season=${yr})`);
+  const p=(d.people||[])[0]||{};
+  const rows=[];
+  (p.stats||[]).forEach(s=>{
+    const st=(s.splits||[])[0]?.stat;if(!st)return;
+    const gp=s.group?.displayName;
+    if(gp==='pitching'&&parseFloat(st.inningsPitched)>=5){
+      rows.push(`<div class="trow">投球 <b>${st.wins??0}-${st.losses??0}</b>·ERA <b>${st.era??'-'}</b>·<b>${st.inningsPitched??'-'}</b> 局·<b>${st.strikeOuts??0}</b>K·WHIP <b>${st.whip??'-'}</b>${st.saves?`·<b>${st.saves}</b>SV`:''}</div>`);
+    }
+    if(gp==='hitting'&&parseInt(st.plateAppearances)>=25){
+      rows.push(`<div class="trow">打擊 <b>${st.avg??'-'}</b>·<b>${st.homeRuns??0}</b> 轟·<b>${st.rbi??0}</b> 打點·OPS <b>${st.ops??'-'}</b>${(st.stolenBases|0)>=5?`·<b>${st.stolenBases}</b> 盜`:''}</div>`);
+    }
+  });
+  const html=`<div class="tnm">${esc(p.fullName||'')}${p.primaryPosition?.abbreviation?` <span style="font-weight:600;color:var(--muted)">${esc(p.primaryPosition.abbreviation)}</span>`:''}</div>${rows.join('')||'<div class="trow">本季樣本不足</div>'}`;
+  _ptipCache[pid]=html;return html;
+}
+function initPtip(){
+  if(!matchMedia('(hover: hover)').matches)return; // 觸控裝置不啟用
+  document.addEventListener('mouseover',e=>{
+    const t=e.target.closest('.pnm[data-pid]');
+    if(!t)return;
+    const pid=t.dataset.pid;
+    clearTimeout(_ptipTimer);
+    _ptipTimer=setTimeout(async()=>{
+      _ptipPid=pid;
+      const el=ensurePtip();
+      el.innerHTML=`<div class="trow">讀取中…</div>`;
+      el.classList.add('on');
+      positionPtip(el,e.clientX,e.clientY);
+      try{
+        const html=await fetchPtip(pid);
+        if(_ptipPid!==pid)return;
+        el.innerHTML=html;
+        positionPtip(el,e.clientX,e.clientY);
+      }catch(_){el.classList.remove('on');}
+    },250);
+  });
+  document.addEventListener('mouseout',e=>{
+    if(e.target.closest&&e.target.closest('.pnm[data-pid]')){
+      clearTimeout(_ptipTimer);_ptipPid=null;
+      const el=document.getElementById('ptip');
+      if(el)el.classList.remove('on');
+    }
+  });
+  addEventListener('scroll',()=>{const el=document.getElementById('ptip');if(el)el.classList.remove('on');},{passive:true});
+}
+initPtip();
 function headshot(pid,size){
   return `https://img.mlbstatic.com/mlb-photos/image/upload/w_${size||120},q_auto:best/v1/people/${pid}/headshot/67/current`;
 }
