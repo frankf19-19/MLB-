@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.55 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.56 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2697,6 +2697,51 @@ async function fetchZoneData(pid,season){
     return pts;
   }catch(e){return [];}
 }
+/* ⚡ Statcast 進階球種:整季逐球 CSV 自算揮空率與轉速(Savant 公開搜尋端點) */
+const _scCache={};
+async function fetchStatcast(pid,yr){
+  if(_scCache[pid])return _scCache[pid];
+  const url=`https://baseballsavant.mlb.com/statcast_search/csv?all=true&player_type=pitcher&pitchers_lookup%5B%5D=${pid}&season=${yr}&type=details&min_pitches=0`;
+  const txt=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.text();});
+  const lines=txt.split('\n');
+  const head=lines[0].split(',').map(s=>s.replace(/"/g,''));
+  const iName=head.indexOf('pitch_name'),iDesc=head.indexOf('description'),iSpin=head.indexOf('release_spin_rate');
+  if(iName<0||iDesc<0)throw 0;
+  const agg={};
+  for(let li=1;li<lines.length;li++){
+    const c=lines[li].split(',');
+    if(c.length<=Math.max(iName,iDesc))continue;
+    const nm=(c[iName]||'').replace(/"/g,'');if(!nm)continue;
+    const de=(c[iDesc]||'').replace(/"/g,'');
+    const a=agg[nm]=agg[nm]||{n:0,sw:0,wf:0,spinS:0,spinN:0};
+    a.n++;
+    const isWhiff=de==='swinging_strike'||de==='swinging_strike_blocked';
+    const isSwing=isWhiff||de==='foul'||de==='foul_tip'||de==='hit_into_play';
+    if(isSwing)a.sw++;
+    if(isWhiff)a.wf++;
+    const sp=parseFloat(c[iSpin]);
+    if(isFinite(sp)){a.spinS+=sp;a.spinN++;}
+  }
+  const out={};
+  Object.keys(agg).forEach(nm=>{
+    const a=agg[nm];
+    out[nm.toLowerCase()]={whiff:a.sw>=20?a.wf/a.sw:null,spin:a.spinN?Math.round(a.spinS/a.spinN):null,n:a.n};
+  });
+  _scCache[pid]=out;return out;
+}
+function enrichArsenal(pid,yr,rows){
+  fetchStatcast(pid,yr).then(sc=>{
+    rows.forEach((r,i)=>{
+      const key=Object.keys(sc).find(k=>k===r.name.toLowerCase()||k.includes(r.name.toLowerCase())||r.name.toLowerCase().includes(k));
+      const d2=key?sc[key]:null;
+      const el=document.getElementById('scx-'+i);
+      if(!el)return;
+      if(d2&&(d2.whiff!=null||d2.spin)){
+        el.innerHTML=`${d2.whiff!=null?` · 揮空 <b style="color:var(--amber)">${(d2.whiff*100).toFixed(0)}%</b>`:''}${d2.spin?` · ${d2.spin} rpm`:''}`;
+      }else el.textContent='';
+    });
+  }).catch(()=>{rows.forEach((r,i)=>{const el=document.getElementById('scx-'+i);if(el)el.textContent='';});});
+}
 function arsenalHtml(rows){
   if(!rows.length)return '';
   return `<div class="pos-group" style="margin-top:14px">球種配置(本季使用率與均速)</div>
@@ -2704,7 +2749,7 @@ function arsenalHtml(rows){
     ${rows.map(r=>`<div class="pitchbar">
       <span class="pt">${esc(r.name)}</span>
       <span class="bar"><i style="width:${Math.round(r.pct*100)}%"></i></span>
-      <span class="pv">${(r.pct*100).toFixed(1)}%${r.spd?` · ${r.spd.toFixed(1)} mph`:''}</span>
+      <span class="pv">${(r.pct*100).toFixed(1)}%${r.spd?` · ${r.spd.toFixed(1)} mph`:''}<span id="scx-${rows.indexOf(r)}" style="color:var(--muted)"> · 揮空…</span></span>
     </div>`).join('')}</div>`;
 }
 async function showPlayer(pid,fromPop){
@@ -2800,6 +2845,7 @@ async function showPlayer(pid,fromPop){
       ${tables||'<div class="empty" style="margin-top:12px">查無生涯數據。</div>'}`;
     const tl=$('pdTeam');
     if(tl&&p.currentTeam?.id)tl.addEventListener('click',()=>showTeam(p.currentTeam.id,tn));
+    if(arsenal&&arsenal.length)enrichArsenal(pid,season,arsenal);
     const fb=$('favBtnP');
     if(fb)fb.addEventListener('click',()=>{
       const on=favToggleP(pid,p.fullName);
