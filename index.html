@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.57 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.58 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用
 </div>
 
 <script>
@@ -1863,6 +1863,54 @@ function buildWarRoom(date,games,preds,reviews){
     const trend=(last.e!=null&&prev.e!=null)?(last.e<prev.e-0.03?'持續收斂中':(last.e>prev.e+0.05?'近期誤差略為放大':'穩定')):'穩定';
     parts.push(`我的狀態:近30天命中 ${last.hit}%、分差誤差 ${last.e}(${trend});目前分差係數 K=${c.k}、信心鈍感度 σ=${c.sigma}`+
       (c.tune&&(c.tune.bpW!==1||c.tune.stW!==1||c.tune.luW!==1)?`,並已自動微調${c.tune.stW!==1?'先發':''}${c.tune.bpW!==1?'牛棚':''}${c.tune.luW!==1?'名單':''}層權重`:'')+'。');
+  }
+
+  // 5.5) 逐場推理鏈
+  const chain=sorted.slice(0,3).map(x=>{
+    const w=x.p.why||'';
+    const bits=[];
+    const mSt=w.match(/先發 [^。]*?(?=。)/);if(mSt)bits.push(mSt[0]);
+    const mBp=w.match(/牛棚[^。]*?(?=。)/);if(mBp)bits.push(mBp[0]);
+    const mLu=w.match(/當日打線[^。]*?(?=。)/);if(mLu)bits.push(mLu[0]);
+    const mWx=w.match(/(天氣|此主場)[^。]*?(?=。)/);if(mWx)bits.push(mWx[0]);
+    const b=marginBands(Math.abs(x.p.raw_margin*MARGIN_K),x.p.sig_scale);
+    return `• ${x.p.predicted_winner} ${Math.round(conf(x)*100)}%:${bits.slice(0,3).join(';')||'多層小幅優勢累積'}`+
+      (b?`;同時保留 ${(b[0]*100).toFixed(0)}% 爆冷可能`:'')+'。';
+  }).join('\n');
+  if(chain)parts.push('逐場推理:\n'+chain);
+
+  // 5.6) 我的成長軌跡
+  const c2=window._cloud;
+  if(c2&&c2.hist&&c2.hist.length>=10){
+    const H=c2.hist.filter(r=>r.k!=null&&r.e!=null);
+    if(H.length>=10){
+      const a0=H[0],a1=H[H.length-1];
+      const kUp=a1.k-a0.k, eDn=a0.e-a1.e, sChg=a1.s-a0.s;
+      const seg=[`從 ${a0.d} 到 ${a1.d} 這 ${H.length} 次校準裡`];
+      seg.push(`分差係數 K 由 ${a0.k} 走到 ${a1.k}${kUp>0.03?'——校準系統越來越信任我的原始判斷,我被允許講得更明確':(kUp<-0.03?'——系統要我收斂,我照做':'——維持在甜蜜點')}`);
+      seg.push(`分差誤差 ${a0.e} → ${a1.e}${eDn>0.03?',確實變準了':(eDn<-0.03?',近期變差,我正在追':',大致持平')}`);
+      if(Math.abs(sChg)>0.05)seg.push(`信心鈍感度 σ ${a0.s} → ${a1.s},這是我自己調的:${sChg>0?'過去我在高信心場太自負,現在講話更保守':'我發現可以更果斷'}`);
+      if(c2.tune){
+        const t=[];
+        if(c2.tune.stW!==1)t.push(`先發層×${c2.tune.stW}`);
+        if(c2.tune.bpW!==1)t.push(`牛棚層×${c2.tune.bpW}`);
+        if(c2.tune.luW!==1)t.push(`名單層×${c2.tune.luW}`);
+        if(t.length)seg.push(`並依近期失誤類型自動改變各層話語權(${t.join('、')})`);
+      }
+      parts.push('我的成長軌跡:'+seg.join(';')+'。');
+    }
+  }
+
+  // 5.7) 我正在學什麼
+  if(c2&&c2.ledger&&c2.ledger.length>60){
+    const rec=c2.ledger.slice(-260).filter(x=>x.hit===0&&x.cat);
+    if(rec.length>=20){
+      const cc={};rec.forEach(x=>cc[x.cat]=(cc[x.cat]||0)+1);
+      const zh={coin:'五五波輸面',edge:'機率內小輸',late:'終盤逆轉',shell:'看好方投手被打爆',cold:'看好方打線熄火'};
+      const top2=['shell','cold','late'].map(k2=>[k2,cc[k2]||0]).sort((a,b)=>b[1]-a[1])[0];
+      const coinShare=((cc.coin||0)+(cc.edge||0))/rec.length*100;
+      parts.push(`我正在學的:近期未中場次裡 ${coinShare.toFixed(0)}% 屬本質隨機(五五波、機率內小輸),這部分任何模型都碰不了;真正可修的最大宗是「${zh[top2[0]]}」(${(top2[1]/rec.length*100).toFixed(0)}%)——我每天的自動調權就是衝著這格去的,等它的佔比下降,就是我又進步一次的證據。`);
+    }
   }
 
   // 6) 昨日/今日已完成的自省
