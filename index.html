@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.58 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.59 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2125,6 +2125,29 @@ function playerCard(entry){
 }
 
 /* ---------- 球隊名單頁 ---------- */
+/* 🧠 球隊大腦診斷:模型對這支球隊的自我認知(獨家:來自 1500 場紀錄簿) */
+function teamBrain(teamName){
+  const c=window._cloud;
+  if(!c||!c.ledger||!teamName)return '';
+  const L=c.ledger.filter(x=>x.m!=null&&x.am!=null&&(x.hm===teamName||x.aw===teamName));
+  if(L.length<20)return '';
+  const K=c.k||1;
+  const recent=L.slice(-25);
+  const resid=g=>g.map(x=>{const r=x.am-x.m*K;return x.hm===teamName?r:-r;});
+  const all=resid(L),rec=resid(recent);
+  const avg=a=>a.reduce((s,v)=>s+v,0)/a.length;
+  const bias=avg(all),rbias=avg(rec);
+  const pickedN=L.filter(x=>(x.m>=0)===(x.hm===teamName)).length;
+  const pickedHit=L.filter(x=>(x.m>=0)===(x.hm===teamName)&&x.hit===1).length;
+  const bits=[];
+  bits.push(Math.abs(bias)<0.2?`模型對 ${teamName} 的評估大致中性(整季殘差 ${bias>=0?'+':''}${bias.toFixed(2)} 分)`
+    :bias>0?`模型整季略為低估 ${teamName}(殘差 +${bias.toFixed(2)} 分,實際表現常優於預期)`
+    :`模型整季略為高估 ${teamName}(殘差 ${bias.toFixed(2)} 分,實際常不如預期)`);
+  if(Math.abs(rbias-bias)>0.35)
+    bits.push(`但近 25 場轉為 ${rbias>0?'被低估':'被高估'}(${rbias>=0?'+':''}${rbias.toFixed(2)})——球隊狀態正在變化,雙窗口校正已在追`);
+  if(pickedN>=8)bits.push(`我看好他們 ${pickedN} 次、中 ${pickedHit} 次(${(pickedHit/pickedN*100).toFixed(0)}%)`);
+  return `<div class="analysis" style="margin-bottom:12px"><span class="k">🧠 大腦診斷</span>${esc(bits.join(';'))}。</div>`;
+}
 async function showTeam(teamId,teamName,fromPop){
   if(!fromPop)history.pushState({v:'team',id:teamId,name:teamName},'');
   showView('team');
@@ -2159,7 +2182,7 @@ async function showTeam(teamId,teamName,fromPop){
       list.sort((a,b)=>rank(a)-rank(b));
       html+=`<div class="pos-group">${k}(${list.length})</div>`+list.map(playerCard).join('');
     }
-    $('roster').innerHTML=html;
+    $('roster').innerHTML=teamBrain(teamName)+html;
     bindPlayerClicks($('roster'));
     $('roster').querySelectorAll('.fav-star').forEach(b=>b.addEventListener('click',e=>{
       e.stopPropagation();
@@ -2581,6 +2604,31 @@ async function loadGame(gid){
     const aR=ls.teams?.away?.runs??0,hR=ls.teams?.home?.runs??0;
     const innTxt=st==='Live'?`${ls.currentInning||''}局${ls.isTopInning?'上':'下'}`:(st==='Final'?'終場':gd.status?.detailedState||'');
     const inns=ls.innings||[];
+    const flowRead=(()=>{
+      if(!inns.length||st==='Preview')return '';
+      const aR=inns.map(i=>i.away?.runs||0),hR=inns.map(i=>i.home?.runs||0);
+      const n=inns.length;let lead=[],cum=[0,0];
+      for(let i=0;i<n;i++){cum[0]+=aR[i];cum[1]+=hR[i];lead.push(cum[1]-cum[0]);}
+      const fin=lead[n-1];
+      const winner=fin>0?(home.team?.name||'主隊'):(fin<0?(away.team?.name||'客隊'):null);
+      if(!winner)return '';
+      const early=lead.slice(0,Math.min(3,n)),late=lead.slice(Math.max(0,n-3));
+      const flips=lead.filter((v,i)=>i>0&&Math.sign(v)!==0&&Math.sign(lead[i-1])!==0&&Math.sign(v)!==Math.sign(lead[i-1])).length;
+      const maxGap=Math.max(...lead.map(Math.abs));
+      const bigInn=Math.max(...aR,...hR);
+      const bits=[];
+      if(Math.sign(early[early.length-1]||0)===Math.sign(fin)&&Math.abs(fin)>=3)
+        bits.push(`${winner}早早取得主導,全場沒讓出領先`);
+      else if(flips>=2)bits.push(`雙方 ${flips} 度易主,是拉鋸戰`);
+      else if(Math.sign(late[0]||0)!==Math.sign(fin)&&fin!==0)bits.push(`終盤才翻盤——${winner}後段逆轉`);
+      else if(Math.abs(fin)<=1)bits.push(`一分之差的僵局,任何一個打席都可能改寫`);
+      if(bigInn>=4)bits.push(`其中一局灌進 ${bigInn} 分,是勝負分水嶺`);
+      if(maxGap>=6)bits.push(`最大領先曾達 ${maxGap} 分`);
+      const totR=cum[0]+cum[1];
+      bits.push(totR<=5?'整體是投手主導的低分戰':(totR>=13?'雙方打線都熱,典型高分大戰':''));
+      const txt=bits.filter(Boolean).join(';');
+      return txt?`<div class="analysis" style="margin-top:10px"><span class="k">🧠 過程解讀</span>${esc(txt)}。</div>`:'';
+    })();
     const innCells=n=>inns.map(i=>`<td>${i[n]?.runs??''}</td>`).join('');
     const innHead=inns.map(i=>`<th>${i.num}</th>`).join('');
     const lineTable=inns.length?`<div class="table-wrap" style="margin-top:14px"><table class="stat" style="min-width:420px">
@@ -2627,7 +2675,7 @@ async function loadGame(gid){
     }
     const boxes=bvpHtml+boxTable('away',box)+pitBoxTable('away',box,dec)+boxTable('home',box)+pitBoxTable('home',box,dec);
     $('gdTag').textContent=st==='Live'?'每 20 秒自動更新':'';
-    $('gameDetail').innerHTML=`
+    $('gameDetail').innerHTML=flowRead+`
       <div class="gd-score">
         <div class="gd-team">${teamLogo(away.id,52)}<div class="gnm" data-team="${away.id}">${esc(away.teamName||away.name||'客')}</div>
           <div class="grec">${esc(away.record?`${away.record.wins}-${away.record.losses}`:'')}</div></div>
