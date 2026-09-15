@@ -567,7 +567,7 @@
       </div>
     </section>
     <section id="aiSec" class="hidden">
-      <div class="sec-head"><h2>每日總評</h2><span class="tag">由當日數據自動生成 · 免金鑰</span></div>
+      <div class="sec-head"><h2>AI 戰情官</h2><span class="tag">模型自述今日判斷與自我評估</span></div>
       <div class="analysis" id="aiText"></div>
     </section>
     <section id="headlineSec" class="hidden">
@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.56 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.57 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1805,13 +1805,77 @@ async function loadDay(quiet){
     enrichMissAutopsy(games).catch(()=>{});
     updateFavToday(games,date);
     const summary=buildDailySummary(date,games,curPreds,reviews,{hits,errSum,errN});
-    $('aiText').textContent=summary;
-    $('aiSec').classList.toggle('hidden',!summary);
+    let war='';
+    try{war=buildWarRoom(date,games,curPreds,reviews);}catch(_){}
+    const aiEl=$('aiText');
+    aiEl.innerHTML=(war?`<div style="white-space:pre-wrap;line-height:1.85">${esc(war)}</div>`:'')
+      +(summary?`<div style="margin-top:${war?'12px':'0'};padding-top:${war?'10px':'0'};${war?'border-top:1px solid var(--line);':''}color:var(--muted);font-size:12.5px;white-space:pre-wrap">${esc(summary)}</div>`:'');
+    $('aiSec').classList.toggle('hidden',!(war||summary));
   }catch(e){st.className='status err';st.textContent='載入失敗:'+e.message;
     if(!quiet)$('games').innerHTML=`<div class="empty">讀取不到資料,請確認網路後再試。</div>`;}
   finally{if(!quiet){btn.disabled=false;btn.classList.remove('spin');}}
 }
 
+/* 🧠 AI 戰情官:讀完當日盤勢 + 模型自身近況,寫出人話判斷 */
+function buildWarRoom(date,games,preds,reviews){
+  const P=games.map(g=>({g,p:preds[g.id]})).filter(x=>x.p&&x.p.raw_margin!=null);
+  if(!P.length)return '';
+  const isToday=date===etToday();
+  const conf=x=>Math.max(x.p.home_win_prob,x.p.away_win_prob);
+  const sorted=[...P].sort((a,b)=>conf(b)-conf(a));
+  const top=sorted[0], flat=sorted[sorted.length-1];
+  const strong=P.filter(x=>conf(x)>=0.62).length;
+  const coin=P.filter(x=>conf(x)<0.55).length;
+  const parts=[];
+
+  // 1) 今日盤勢性格
+  const mood=strong>=P.length*0.35?'分明':(coin>=P.length*0.5?'混沌':'中性');
+  parts.push(`今天 ${P.length} 場,強弱${mood}:${strong} 場我有明顯傾向、${coin} 場實質五五波。`+
+    (mood==='混沌'?'這種日子我的整體命中率會被拉低,不是模型變差,是比賽本身沒有明顯落差。'
+     :mood==='分明'?'差距大的日子通常是我表現最好的日子。':''));
+
+  // 2) 最有把握的一場 + 理由(取預測理由的關鍵句)
+  if(top){
+    const why=(top.p.why||'').split('。').filter(s=>/先發|牛棚|打線|近14天/.test(s)).slice(0,2).join('、');
+    parts.push(`最有把握:${top.p.predicted_winner}(${Math.round(conf(top)*100)}%)——${why||'多層優勢疊加'}。`+
+      (top.p.sig_scale&&top.p.sig_scale>1.03?'不過這場總分期望偏高,大分環境的變數也大,信心已自動打折。':''));
+  }
+
+  // 3) 陷阱場:高信心但落點顯示爆冷敗機率仍高
+  const trap=P.filter(x=>{
+    const b=marginBands(Math.abs(x.p.raw_margin*MARGIN_K),x.p.sig_scale);
+    return b&&conf(x)>=0.60&&b[0]>=0.36;
+  }).sort((a,b)=>conf(b)-conf(a))[0];
+  if(trap){
+    const b=marginBands(Math.abs(trap.p.raw_margin*MARGIN_K),trap.p.sig_scale);
+    parts.push(`留意陷阱:${trap.p.predicted_winner} 帳面 ${Math.round(conf(trap)*100)}%,但我給對手的爆冷機率仍有 ${(b[0]*100).toFixed(0)}%——看好不等於穩。`);
+  }
+
+  // 4) 最難的一場
+  if(flat&&conf(flat)<0.55)
+    parts.push(`最難判讀:${flat.g.away} vs ${flat.g.home}(${Math.round(conf(flat)*100)}%),這場我只是勉強選邊,建議當作純娛樂看。`);
+
+  // 5) 模型自我評估(讀雲端近況)
+  const c=window._cloud;
+  if(c&&c.hist&&c.hist.length){
+    const last=c.hist[c.hist.length-1];
+    const prev=c.hist[Math.max(0,c.hist.length-8)];
+    const trend=(last.e!=null&&prev.e!=null)?(last.e<prev.e-0.03?'持續收斂中':(last.e>prev.e+0.05?'近期誤差略為放大':'穩定')):'穩定';
+    parts.push(`我的狀態:近30天命中 ${last.hit}%、分差誤差 ${last.e}(${trend});目前分差係數 K=${c.k}、信心鈍感度 σ=${c.sigma}`+
+      (c.tune&&(c.tune.bpW!==1||c.tune.stW!==1||c.tune.luW!==1)?`,並已自動微調${c.tune.stW!==1?'先發':''}${c.tune.bpW!==1?'牛棚':''}${c.tune.luW!==1?'名單':''}層權重`:'')+'。');
+  }
+
+  // 6) 昨日/今日已完成的自省
+  const done=reviews?reviews.filter(r=>r):[];
+  if(done.length>=3){
+    const hitN=done.filter(r=>r.hit).length;
+    const rate=hitN/done.length;
+    parts.push(rate>=0.6?`今日已完賽 ${done.length} 場中 ${hitN} 場如預期,節奏對。`
+      :rate<=0.35?`今日已完賽 ${done.length} 場只中 ${hitN} 場——這種日子我會誠實記錄,明天的校準會把它算進去。`
+      :`今日已完賽 ${done.length} 場中 ${hitN} 場,普通的一天。`);
+  }
+  return parts.join('\n\n');
+}
 /* ---------- 球員數據 → 標記與強弱項 ---------- */
 function getStat(person,group){
   const arr=(person.stats||[]).find(s=>s.group?.displayName===group)?.splits||[];
