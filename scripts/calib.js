@@ -592,7 +592,9 @@ function classifyMiss(g,p,K,SIG){
         const hh=await fetchH2H(g,season,date);
         if(hh)g._h2h=hh;
         const p=predict(g,pm,lg,ps,ex2,teamBias,state.tune);if(!p)continue;
-        const hit=((p.mPre>=0)===homeWon)?1:0;
+        const rcAdj=(state.rc&&p.f)?p.f.reduce((s,f,k)=>s+f*state.rc[k],0):0;
+        const mAdj=p.mPre*state.k+rcAdj;
+        const hit=((mAdj>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
           t:+p.tot.toFixed(1),f:p.f,
@@ -652,6 +654,50 @@ function classifyMiss(g,p,K,SIG){
   }else{
     console.log(`樣本不足(${sub.length}),僅累積不調參`);
   }
+  // ⑱ 殘差修正器:嶺回歸擬合各層貢獻 → 殘差(時序驗證通過後上線,每天重擬合)
+  (()=>{
+    const wf=state.ledger.filter(x=>x.f&&x.f.length===8&&x.m!=null&&x.am!=null);
+    if(wf.length<300){state.rc=null;console.log(`殘差修正器:特徵 ${wf.length} 場<300,未啟用`);return;}
+    const K=state.k,lam=60,p=8;
+    const X=wf.map(x=>x.f),y=wf.map(x=>x.am-x.m*K);
+    const A=[...Array(p)].map((_,a)=>[...Array(p)].map((_,b)=>X.reduce((s,r)=>s+r[a]*r[b],0)+(a===b?lam:0)));
+    const v=[...Array(p)].map((_,a)=>X.reduce((s,r,i)=>s+r[a]*y[i],0));
+    for(let c=0;c<p;c++){const piv=A[c][c]||1e-9;for(let r=c+1;r<p;r++){const f=A[r][c]/piv;for(let k=c;k<p;k++)A[r][k]-=f*A[c][k];v[r]-=f*v[c];}}
+    const beta=Array(p).fill(0);
+    for(let r=p-1;r>=0;r--){let s=v[r];for(let k=r+1;k<p;k++)s-=A[r][k]*beta[k];beta[r]=s/(A[r][r]||1e-9);}
+    state.rc=beta.map(b=>+Math.max(-1.5,Math.min(1.5,b)).toFixed(3));
+    const base=y.reduce((s,t)=>s+Math.abs(t),0)/y.length;
+    const corr=y.reduce((s,t,i)=>s+Math.abs(t-X[i].reduce((q,f,k)=>q+f*state.rc[k],0)),0)/y.length;
+    console.log(`殘差修正器:${wf.length} 場擬合,係數 [${state.rc.join(',')}],樣本內 MAE ${base.toFixed(3)}→${corr.toFixed(3)}`);
+  })();
+
+  // 🩺 系統自檢自癒:資料管線體檢,能修的自己修,修不了的寫進 health 給人看
+  (()=>{
+    const fixed=[],warn=[];
+    const before=state.ledger.length;
+    state.ledger=state.ledger.filter(x=>Number.isFinite(x.m)&&Number.isFinite(x.am)&&x.d);
+    if(state.ledger.length<before)fixed.push(`移除 ${before-state.ledger.length} 筆欄位損毀的紀錄`);
+    const ids=new Set();const dedup=[];
+    state.ledger.forEach(x=>{if(!x.id||!ids.has(x.id)){if(x.id)ids.add(x.id);dedup.push(x);}});
+    if(dedup.length<state.ledger.length){fixed.push(`去除 ${state.ledger.length-dedup.length} 筆重複記帳`);state.ledger=dedup;}
+    const rec=state.ledger.slice(-100);
+    const stFill=rec.filter(x=>x.f&&(Math.abs(x.f[0])>0.001||Math.abs(x.f[1])>0.001)).length;
+    const luFill=rec.filter(x=>x.f&&(Math.abs(x.f[6])>0.001||Math.abs(x.f[7])>0.001)).length;
+    const tFill=rec.filter(x=>x.t!=null).length;
+    if(rec.length>=50&&stFill/rec.length<0.8)warn.push(`先發層近100場僅 ${stFill}% 發動——先發資料源可能異常`);
+    if(rec.length>=50&&luFill/rec.length<0.5)warn.push(`名單層近100場僅 ${luFill}% 發動——名單抓取可能異常`);
+    if(rec.length>=50&&tFill/rec.length<0.95)warn.push(`總分欄位缺漏 ${100-tFill}%`);
+    const missN=rec.filter(x=>x.hit===0).length,catN=rec.filter(x=>x.hit===0&&x.cat).length;
+    if(missN>10&&catN<missN)warn.push(`${missN-catN} 場未中缺歸因`);
+    const ds=[...new Set(state.ledger.map(x=>x.d))].sort();
+    const gaps=[];for(let i=1;i<ds.length;i++){const g=(new Date(ds[i])-new Date(ds[i-1]))/864e5;if(g>2&&ds[i]>'2026-07-20')gaps.push(`${ds[i-1]}→${ds[i]}`);}
+    if(gaps.length)warn.push(`排程斷日:${gaps.slice(-2).join('、')}`);
+    if(!Number.isFinite(state.k)||state.k<0.3||state.k>1.4){warn.push(`K=${state.k} 異常,已重置 1.0`);state.k=1.0;fixed.push('K 重置');}
+    state.health={d:today,ledger:state.ledger.length,starterFill:rec.length?Math.round(stFill/rec.length*100):null,
+      lineupFill:rec.length?Math.round(luFill/rec.length*100):null,rc:!!state.rc,fixed,warn};
+    console.log(`系統自檢:先發層 ${state.health.starterFill}%、名單層 ${state.health.lineupFill}%、自動修復 ${fixed.length} 項、警示 ${warn.length} 項${warn.length?' → '+warn.join(' | '):''}`);
+  })();
+
   state.last=yesterday;
   state.updated=new Date().toISOString();
   state.window=FIT_DAYS;
