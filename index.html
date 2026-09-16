@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.59 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.60 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1248,8 +1248,9 @@ function predict(g,pm,lg,ps,ex){
     return {st:Math.max(.75,Math.min(1.25,e/5.2)),bp:Math.max(.75,Math.min(1.25,(9-e)/3.8))};
   };
   const scH=ipScale(hStV),scA=ipScale(aStV);
-  if(dHome!=null)expAway+=dHome*stW*scH.st*raH.shrink;
-  if(dAway!=null)expHome+=dAway*stW*scA.st*raA.shrink;
+  const _FT={};
+  const _stH=(dHome!=null)?dHome*stW*scH.st*raH.shrink:0, _stA=(dAway!=null)?dAway*stW*scA.st*raA.shrink:0;
+  expAway+=_stH;expHome+=_stA;_FT.stH=_stH;_FT.stA=_stA;
   const recNote=st=>{
     if(!st||!isFinite(st.recEra)||!isFinite(st.seasonEra))return '';
     const diff=st.recEra-st.seasonEra;
@@ -1282,8 +1283,8 @@ function predict(g,pm,lg,ps,ex){
     return Math.max(-0.5,Math.min(0.5,d));
   };
   const bpH=bpAdj(g.homeId), bpA=bpAdj(g.awayId);
-  if(bpH!=null)expAway+=bpH*bpW*scH.bp;
-  if(bpA!=null)expHome+=bpA*bpW*scA.bp;
+  const _bpH=(bpH!=null)?bpH*bpW*scH.bp:0,_bpA=(bpA!=null)?bpA*bpW*scA.bp:0;
+  expAway+=_bpH;expHome+=_bpA;_FT.bp=_bpA-_bpH;
   let bpTxt='';
   if(bpH!=null&&bpA!=null){
     const eH=exm[g.homeId].bpEra,eA=exm[g.awayId].bpEra,edge=bpA-bpH;
@@ -1324,6 +1325,12 @@ function predict(g,pm,lg,ps,ex){
   const marginPre=expHome-expAway;
   const mid=(expHome+expAway)/2, half=marginPre/2*MARGIN_K;
   expHome=mid+half; expAway=mid-half;
+  // ⑱ 殘差修正器(雲端每日擬合的八維嶺回歸,時序驗證通過)
+  _FT.wx=wxAdj||0;_FT.h2h=h2hAdj||0;_FT.bias=biasAdj||0;_FT.luH=+(luH-1).toFixed(3);_FT.luA=+(luA-1).toFixed(3);
+  const _fArr=[_FT.stH,_FT.stA,_FT.bp,_FT.bias,_FT.h2h,_FT.wx,_FT.luH,_FT.luA].map(v=>+(v||0).toFixed(2));
+  const _rc=(window._cloud&&Array.isArray(window._cloud.rc)&&window._cloud.rc.length===8)?window._cloud.rc:null;
+  let rcAdj=0;
+  if(_rc){rcAdj=Math.max(-1.2,Math.min(1.2,_fArr.reduce((s,f,k)=>s+f*_rc[k],0)));expHome+=rcAdj/2;expAway-=rcAdj/2;}
   const margin=expHome-expAway;
   const sigScale=Math.max(.90,Math.min(1.10,Math.pow(((expHome+expAway)||8.6)/8.6,0.35)));
   const hp=Math.max(.05,Math.min(.95,normCdf(margin/(RUN_SIGMA*sigScale))));
@@ -1355,6 +1362,7 @@ function predict(g,pm,lg,ps,ex){
   else if(luA>=1.015)luNotes.push(`客隊今日名單火力較強(×${luA.toFixed(2)})`);
   if(luNotes.length)why+=`當日打線:${luNotes.join('、')}。`;
   if(Math.abs(wxAdj)>=0.15)why+=`天氣:開賽氣溫約 ${g.wxTemp.toFixed(0)}°C,${wxAdj>0?'炎熱有利進攻':'低溫壓抑攻勢'}(總分 ${wxAdj>0?'+':''}${wxAdj.toFixed(1)})。`;
+  if(Math.abs(rcAdj)>=0.05)why+=`殘差修正器:依 ${(window._cloud&&window._cloud.ledger)?window._cloud.ledger.filter(x=>x.f).length:'數百'} 場回歸,判定各層合計${rcAdj>0?'低估主隊':'高估主隊'},修正 ${rcAdj>0?'+':''}${rcAdj.toFixed(2)} 分。`;
   if(Math.abs(famAdjA)>=0.03)why+=`打線熟悉度:客隊全隊對此先發生涯打擊${famAdjA>0?'偏優':'偏弱'},微調(${famAdjA>0?'+':''}${famAdjA.toFixed(2)})。`;
   if(Math.abs(famAdjH)>=0.03)why+=`打線熟悉度:主隊全隊對此先發生涯打擊${famAdjH>0?'偏優':'偏弱'},微調(${famAdjH>0?'+':''}${famAdjH.toFixed(2)})。`;
   if(Math.abs(h2hAdj)>=0.10)why+=`本季對戰:${h2hAdj>0?'主':'客'}隊交手佔優(${g._h2h.a}–${g._h2h.h},客–主),已微調(${h2hAdj>0?'+':''}${h2hAdj.toFixed(2)})。`;
@@ -1913,6 +1921,15 @@ function buildWarRoom(date,games,preds,reviews){
     }
   }
 
+  // 5.8) 系統自檢(雲端每日體檢結果)
+  if(c2&&c2.health){
+    const hh=c2.health;
+    const s=[`昨夜自檢:先發資料發動率 ${hh.starterFill??'-'}%、名單資料 ${hh.lineupFill??'-'}%`];
+    if(hh.rc)s.push('第十八層殘差修正器運作中');
+    if(hh.fixed&&hh.fixed.length)s.push('自動修復:'+hh.fixed.join('、'));
+    s.push(hh.warn&&hh.warn.length?`⚠ 需要人工留意:${hh.warn.join(';')}`:'管線無異常');
+    parts.push('系統自檢:'+s.join(';')+'。');
+  }
   // 6) 昨日/今日已完成的自省
   const done=reviews?reviews.filter(r=>r):[];
   if(done.length>=3){
