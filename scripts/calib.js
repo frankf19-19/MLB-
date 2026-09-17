@@ -511,6 +511,18 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
   return {mPre:expHome-expAway,expHome,expAway,tot:expHome+expAway,f:fArr};
 }
 const sigScaleOf=t=>Math.max(.90,Math.min(1.10,Math.pow((t||8.6)/8.6,0.35)));
+/* 🧬 比賽過程簽名:[易主次數, 最大領先, 單局最大得分, 前3局領先方是否守住, 是否6局後翻盤, 總分, 主隊6局後領先分差] */
+function processSig(g){
+  const inns=g.inns||[];if(inns.length<5)return null;
+  let a=0,h=0,lead=[],flips=0,maxLead=0,bigInn=0;
+  inns.forEach((i,k)=>{a+=i.a||0;h+=i.h||0;const l=h-a;lead.push(l);
+    maxLead=Math.max(maxLead,Math.abs(l));bigInn=Math.max(bigInn,i.a||0,i.h||0);
+    if(k>0&&Math.sign(l)&&Math.sign(lead[k-1])&&Math.sign(l)!==Math.sign(lead[k-1]))flips++;});
+  const fin=lead[lead.length-1];
+  const l3=lead[Math.min(2,lead.length-1)];
+  const l6=lead[Math.min(5,lead.length-1)];
+  return [flips,maxLead,bigInn,(Math.sign(l3)&&Math.sign(l3)===Math.sign(fin))?1:0,(Math.sign(l6)&&Math.sign(l6)!==Math.sign(fin))?1:0,a+h,l6];
+}
 function classifyMiss(g,p,K,SIG){
   const favHome=(p.mPre||0)>=0;
   const prob=Math.max(.05,Math.min(.95,normCdf(p.mPre*K/(SIG*sigScaleOf(p.tot)))));
@@ -597,7 +609,7 @@ function classifyMiss(g,p,K,SIG){
         const hit=((mAdj>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
-          t:+p.tot.toFixed(1),f:p.f,
+          t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
         seen.add(g.id);added++;
       }
