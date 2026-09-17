@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.60 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.61 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1826,10 +1826,10 @@ async function loadDay(quiet){
 
 /* 🧠 AI 戰情官:讀完當日盤勢 + 模型自身近況,寫出人話判斷 */
 function buildWarRoom(date,games,preds,reviews){
-  const P=games.map(g=>({g,p:preds[g.id]})).filter(x=>x.p&&x.p.raw_margin!=null);
+  const P=games.map((g,i)=>({g,p:(Array.isArray(preds)?preds[i]:preds[g.id])})).filter(x=>x.p&&x.p.raw_margin!=null);
   if(!P.length)return '';
   const isToday=date===etToday();
-  const conf=x=>Math.max(x.p.home_win_prob,x.p.away_win_prob);
+  const conf=x=>Math.max(x.p.home_prob||0,x.p.away_prob||0);
   const sorted=[...P].sort((a,b)=>conf(b)-conf(a));
   const top=sorted[0], flat=sorted[sorted.length-1];
   const strong=P.filter(x=>conf(x)>=0.62).length;
