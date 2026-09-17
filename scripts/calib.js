@@ -269,6 +269,20 @@ async function fetchWxTemp(teamId,tsIso){
 async function fetchLineupRatio(g,exMap,asOf){
   try{
     const box=await jget(`${API}/game/${g.id}/boxscore`);
+    // 🧾 全體登板投手紀錄(先發/中繼/守護神,依登板序):[id, 出局數, 失分]
+    try{
+      const pit={};
+      ['away','home'].forEach(side=>{
+        const t=box.teams?.[side];
+        pit[side==='away'?'a':'h']=(t?.pitchers||[]).map(id=>{
+          const s=t.players?.['ID'+id]?.stats?.pitching||{};
+          const ipS=String(s.inningsPitched||'0.0').split('.');
+          const outs=(parseInt(ipS[0])||0)*3+(parseInt(ipS[1])||0);
+          return [id,outs,s.runs||0];
+        });
+      });
+      if(pit.a.length||pit.h.length)g._pit=pit;
+    }catch(e){}
     const orders={};
     ['away','home'].forEach(side=>{
       const t=box.teams?.[side];const order=t?.battingOrder||[];
@@ -609,7 +623,7 @@ function classifyMiss(g,p,K,SIG){
         const hit=((mAdj>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
-          t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),sp:[g.awayPitId||null,g.homePitId||null],
+          t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),sp:[g.awayPitId||null,g.homePitId||null],pt:g._pit||null,
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
         seen.add(g.id);added++;
       }
