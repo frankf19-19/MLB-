@@ -609,7 +609,7 @@ function classifyMiss(g,p,K,SIG){
         const hit=((mAdj>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
-          t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),
+          t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),sp:[g.awayPitId||null,g.homePitId||null],
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
         seen.add(g.id);added++;
       }
