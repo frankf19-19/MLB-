@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.61 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.62 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1921,6 +1921,15 @@ function buildWarRoom(date,games,preds,reviews){
     }
   }
 
+  // 5.75) 過程學習(逐局簽名累積)
+  if(c2&&c2.ledger){
+    const pfN=c2.ledger.filter(x=>Array.isArray(x.pf)).length;
+    if(pfN>0){
+      const PF=c2.ledger.filter(x=>Array.isArray(x.pf)&&x.pf.length>=7);
+      const lateFlip=PF.filter(x=>x.pf[4]===1).length;
+      parts.push(`過程記憶:我已記下 ${pfN} 場的逐局過程(易主、最大領先、翻盤、大局),其中 ${PF.length?(lateFlip/PF.length*100).toFixed(0):0}% 在六局後翻盤——累積到約 400 場後,我會檢驗「球隊的翻盤/崩盤性格」能不能成為賽前訊號。`);
+    }
+  }
   // 5.8) 系統自檢(雲端每日體檢結果)
   if(c2&&c2.health){
     const hh=c2.health;
@@ -2163,7 +2172,26 @@ function teamBrain(teamName){
   if(Math.abs(rbias-bias)>0.35)
     bits.push(`但近 25 場轉為 ${rbias>0?'被低估':'被高估'}(${rbias>=0?'+':''}${rbias.toFixed(2)})——球隊狀態正在變化,雙窗口校正已在追`);
   if(pickedN>=8)bits.push(`我看好他們 ${pickedN} 次、中 ${pickedHit} 次(${(pickedHit/pickedN*100).toFixed(0)}%)`);
-  return `<div class="analysis" style="margin-bottom:12px"><span class="k">🧠 大腦診斷</span>${esc(bits.join(';'))}。</div>`;
+  // 過程性格(來自逐局過程簽名)
+  const P=L.filter(x=>Array.isArray(x.pf)&&x.pf.length>=7);
+  let persona='';
+  if(P.length>=15){
+    const isHome=x=>x.hm===teamName;
+    const won=x=>(x.am>0)===isHome(x);
+    let lead6=0,held=0,trail6=0,came=0,blow=0;
+    P.forEach(x=>{
+      const l6=isHome(x)?x.pf[6]:-x.pf[6];
+      if(l6>0){lead6++;if(won(x))held++;}
+      if(l6<0){trail6++;if(won(x))came++;}
+      if(Math.abs(x.am)>=5&&won(x))blow++;
+    });
+    const seg=[];
+    if(lead6>=6)seg.push(`六局後領先時守住率 ${(held/lead6*100).toFixed(0)}%(${lead6} 次)${held/lead6<0.7?'——牛棚是明顯弱點':held/lead6>=0.9?'——關門極穩':''}`);
+    if(trail6>=6)seg.push(`六局後落後仍翻盤 ${came}/${trail6} 次${came/trail6>=0.25?'——很有韌性':''}`);
+    if(P.length>=20)seg.push(`大勝(5分+)佔勝場 ${(blow/Math.max(1,P.filter(won).length)*100).toFixed(0)}%`);
+    if(seg.length)persona=`<div class="analysis" style="margin-bottom:12px"><span class="k">🧬 過程性格</span>${esc('近 '+P.length+' 場逐局紀錄:'+seg.join(';')+'。')}</div>`;
+  }
+  return `<div class="analysis" style="margin-bottom:12px"><span class="k">🧠 大腦診斷</span>${esc(bits.join(';'))}。</div>`+persona;
 }
 async function showTeam(teamId,teamName,fromPop){
   if(!fromPop)history.pushState({v:'team',id:teamId,name:teamName},'');
