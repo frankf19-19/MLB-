@@ -62,6 +62,7 @@ async function fetchGames(date){
       awayScore:g.teams?.away?.score,homeScore:g.teams?.home?.score,
       awayWin:!!g.teams?.away?.isWinner,homeWin:!!g.teams?.home?.isWinner,
       awayPitId:g.teams?.away?.probablePitcher?.id,homePitId:g.teams?.home?.probablePitcher?.id,
+      gameType:g.gameType||'R',
       curInn:ls.currentInning,
       inns:(ls.innings||[]).map(i=>({a:i.away?.runs??0,h:i.home?.runs??0}))});
   }));
@@ -360,7 +361,7 @@ const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.06,Ma
 
 /* ⑪ 球隊偏差校正(與網頁版一致) */
 function computeTeamBias(ledger,K){
-  const L=(ledger||[]).filter(x=>x.m!=null&&x.am!=null);
+  const L=(ledger||[]).filter(x=>x.m!=null&&x.am!=null&&!x.po);
   if(L.length<150)return {};
   const ds=[...new Set(L.map(x=>x.d))].sort();
   const cut=ds[Math.max(0,ds.length-30)];
@@ -466,7 +467,7 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
   const restAdj=(st2)=>{
     const ri=restInfo(st2);if(!ri)return {pen:0,shrink:1,note:null};
     let pen=0,shrink=1,note=null;
-    if(ri.gap<=4){pen+=0.10;note=`短休上陣(僅休 ${ri.gap-1} 天)`;}
+    if(ri.gap<=4){pen+=(g.gameType&&g.gameType!=='R')?0.05:0.10;note=`短休上陣(僅休 ${ri.gap-1} 天)`;}
     if(ri.pit!=null&&ri.pit>=105){pen+=0.05;note=(note?note+'且':'')+`上場投 ${ri.pit} 球負荷重`;}
     if(ri.gap>=11){shrink=0.7;note=`距上次登板 ${ri.gap} 天(復出戰,不確定性高)`;}
     return {pen:Math.min(0.15,pen),shrink,note};
@@ -522,6 +523,7 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
   }
   FT.luH=+(luH-1).toFixed(3);FT.luA=+(luA-1).toFixed(3);
   const fArr=[FT.stH,FT.stA,FT.bp,FT.bias,FT.h2h,FT.wx,FT.luH,FT.luA].map(v=>+(v||0).toFixed(2));
+  if(g.gameType&&g.gameType!=='R'){expHome*=0.92;expAway*=0.92;}
   return {mPre:expHome-expAway,expHome,expAway,tot:expHome+expAway,f:fArr};
 }
 const sigScaleOf=t=>Math.max(.90,Math.min(1.10,Math.pow((t||8.6)/8.6,0.35)));
@@ -573,7 +575,7 @@ function classifyMiss(g,p,K,SIG){
   state.tune=state.tune||{stW:1,bpW:1};
   if(state.tune.luW==null)state.tune.luW=1;
   {
-    const Lv=state.ledger.filter(x=>x.m!=null&&x.am!=null);
+    const Lv=state.ledger.filter(x=>x.m!=null&&x.am!=null&&!x.po);
     const dsAll=[...new Set(Lv.map(x=>x.d))].sort();
     const cut30=dsAll[Math.max(0,dsAll.length-30)];
     const R=Lv.filter(x=>x.d>=cut30), G=Lv;
@@ -623,7 +625,7 @@ function classifyMiss(g,p,K,SIG){
         const hit=((mAdj>=0)===homeWon)?1:0;
         state.ledger.push({id:g.id,d:date,aw:g.away,hm:g.home,
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
-          t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),sp:[g.awayPitId||null,g.homePitId||null],pt:g._pit||null,
+          t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),sp:[g.awayPitId||null,g.homePitId||null],pt:g._pit||null,po:(g.gameType&&g.gameType!=='R')?1:0,
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
         seen.add(g.id);added++;
       }
@@ -635,7 +637,7 @@ function classifyMiss(g,p,K,SIG){
   state.ledger=state.ledger.filter(x=>x.d>=keep).sort((a,b)=>a.d.localeCompare(b.d));
   // 擬合:近 FIT_DAYS 天
   const fitStart=shiftDate(yesterday,-(FIT_DAYS-1));
-  const sub=state.ledger.filter(x=>x.d>=fitStart);
+  const sub=state.ledger.filter(x=>x.d>=fitStart&&!x.po);
   if(sub.length>=100){
     let num=0,den=0;sub.forEach(x=>{num+=x.m*x.am;den+=x.m*x.m;});
     if(den>1e-6){
@@ -682,7 +684,7 @@ function classifyMiss(g,p,K,SIG){
   }
   // ⑱ 殘差修正器:嶺回歸擬合各層貢獻 → 殘差(時序驗證通過後上線,每天重擬合)
   (()=>{
-    const wf=state.ledger.filter(x=>x.f&&x.f.length===8&&x.m!=null&&x.am!=null);
+    const wf=state.ledger.filter(x=>x.f&&x.f.length===8&&x.m!=null&&x.am!=null&&!x.po);
     if(wf.length<300){state.rc=null;console.log(`殘差修正器:特徵 ${wf.length} 場<300,未啟用`);return;}
     const K=state.k,lam=60,p=8;
     const X=wf.map(x=>x.f),y=wf.map(x=>x.am-x.m*K);
