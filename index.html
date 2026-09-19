@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.62 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.63 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -693,6 +693,7 @@ async function fetchGames(date,lite){
       away:a.team.name,home:h.team.name,awayId:a.team.id,homeId:h.team.id,
       awayScore:a.score,homeScore:h.score,awayWin:a.isWinner,homeWin:h.isWinner,
       awayPit:a.probablePitcher?.fullName,homePit:h.probablePitcher?.fullName,
+      gameType:g.gameType||'R',seriesDesc:g.seriesDescription||'',seriesGame:g.seriesGameNumber||null,seriesLen:g.gamesInSeries||null,
       awayPitId:a.probablePitcher?.id,homePitId:h.probablePitcher?.id,
       startTpe:taipeiTime(g.gameDate),
       curInn:ls.currentInning,isTop:ls.isTopInning,outs:ls.outs,
@@ -1235,7 +1236,7 @@ function predict(g,pm,lg,ps,ex){
   const restAdj=(st2)=>{
     const ri=restInfo(st2);if(!ri)return {pen:0,shrink:1,note:null};
     let pen=0,shrink=1,note=null;
-    if(ri.gap<=4){pen+=0.10;note=`短休上陣(僅休 ${ri.gap-1} 天)`;}
+    if(ri.gap<=4){pen+=(g.gameType&&g.gameType!=='R')?0.05:0.10;note=`短休上陣(僅休 ${ri.gap-1} 天)`;}
     if(ri.pit!=null&&ri.pit>=105){pen+=0.05;note=(note?note+'且':'')+`上場投 ${ri.pit} 球負荷重`;}
     if(ri.gap>=11){shrink=0.7;note=`距上次登板 ${ri.gap} 天(復出戰,不確定性高)`;}
     return {pen:Math.min(0.15,pen),shrink,note};
@@ -1325,6 +1326,9 @@ function predict(g,pm,lg,ps,ex){
   const marginPre=expHome-expAway;
   const mid=(expHome+expAway)/2, half=marginPre/2*MARGIN_K;
   expHome=mid+half; expAway=mid-half;
+  // 🏆 季後賽模式:得分環境約低 8%(王牌+高槓桿牛棚),兩隊同步縮放
+  const isPO=!!(g.gameType&&g.gameType!=='R');
+  if(isPO){expHome*=0.92;expAway*=0.92;}
   // ⑱ 殘差修正器(雲端每日擬合的八維嶺回歸,時序驗證通過)
   _FT.wx=wxAdj||0;_FT.h2h=h2hAdj||0;_FT.bias=biasAdj||0;_FT.luH=+(luH-1).toFixed(3);_FT.luA=+(luA-1).toFixed(3);
   const _fArr=[_FT.stH,_FT.stA,_FT.bp,_FT.bias,_FT.h2h,_FT.wx,_FT.luH,_FT.luA].map(v=>+(v||0).toFixed(2));
@@ -1362,6 +1366,7 @@ function predict(g,pm,lg,ps,ex){
   else if(luA>=1.015)luNotes.push(`客隊今日名單火力較強(×${luA.toFixed(2)})`);
   if(luNotes.length)why+=`當日打線:${luNotes.join('、')}。`;
   if(Math.abs(wxAdj)>=0.15)why+=`天氣:開賽氣溫約 ${g.wxTemp.toFixed(0)}°C,${wxAdj>0?'炎熱有利進攻':'低溫壓抑攻勢'}(總分 ${wxAdj>0?'+':''}${wxAdj.toFixed(1)})。`;
+  if(isPO)why+=`季後賽模式:得分環境下修 8%、短休先發視為常態、季後賽獨立記帳不影響例行賽校準。`;
   if(Math.abs(rcAdj)>=0.05)why+=`殘差修正器:依 ${(window._cloud&&window._cloud.ledger)?window._cloud.ledger.filter(x=>x.f).length:'數百'} 場回歸,判定各層合計${rcAdj>0?'低估主隊':'高估主隊'},修正 ${rcAdj>0?'+':''}${rcAdj.toFixed(2)} 分。`;
   if(Math.abs(famAdjA)>=0.03)why+=`打線熟悉度:客隊全隊對此先發生涯打擊${famAdjA>0?'偏優':'偏弱'},微調(${famAdjA>0?'+':''}${famAdjA.toFixed(2)})。`;
   if(Math.abs(famAdjH)>=0.03)why+=`打線熟悉度:主隊全隊對此先發生涯打擊${famAdjH>0?'偏優':'偏弱'},微調(${famAdjH>0?'+':''}${famAdjH.toFixed(2)})。`;
@@ -1579,7 +1584,8 @@ function gameCard(g,p,rv){
     return (id?`<span class="plink" data-pid="${id}">${esc(name)}</span>`:esc(name))+stat;
   };
   const pitSeg=(g.awayPit||g.homePit)?`${pitHtml(g.awayPit,g.awayPitId,g.aPitInfo)} vs ${pitHtml(g.homePit,g.homePitId,g.hPitInfo)}`:null;
-  const meta=[g.startTpe?('台灣時間 '+g.startTpe):null,
+  const poTag=(g.gameType&&g.gameType!=='R')?`<span class="tag" style="background:color-mix(in srgb,var(--amber) 22%,transparent);border-color:var(--amber);color:var(--amber);font-weight:800">🏆 ${esc(g.seriesDesc||'季後賽')}${g.seriesGame?` G${g.seriesGame}${g.seriesLen?'/'+g.seriesLen:''}`:''}</span>`:null;
+  const meta=[poTag,g.startTpe?('台灣時間 '+g.startTpe):null,
     pitSeg,
     (!isFinal&&!isLive&&g.detail&&g.detail!=='Scheduled')?g.detail:null].filter(Boolean).join(' · ');
   const innTxt=isLive&&g.curInn?`${g.curInn}局${g.isTop?'上':'下'}`:'';
