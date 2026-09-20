@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.63 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.64 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1385,6 +1385,7 @@ function predict(g,pm,lg,ps,ex){
   return {home_prob:hp,away_prob:1-hp,predicted_winner:fav,home_score_pred:hs,away_score_pred:as,
     exp_home:+expHome.toFixed(1),exp_away:+expAway.toFixed(1),
     margin:Math.abs(margin),raw_margin:margin,raw_margin_pre:marginPre,sig_scale:sigScale,why,
+    st_h:_FT.stH,st_a:_FT.stA,
     pitAdjusted:(dHome!=null||dAway!=null),bpAdjusted:(bpH!=null&&bpA!=null)};
 }
 /* 未中歸因診斷:解剖每場沒中的比賽 */
@@ -1628,7 +1629,7 @@ function gameCard(g,p,rv){
       const tail=1-normCdf(a);
       const ew=tail>0.02?mu+sd*phi/tail:mu;
       return `<span class="mchip">若勝平均贏 <b>${ew.toFixed(1)}</b> 分</span>`;
-    })()}<span class="mchip">分差 <b>${r1(p.margin)}</b></span><span class="mchip">總分 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b></span>${(()=>{
+    })()}<span class="mchip">分差 <b>${r1(p.margin)}</b></span>${(Number.isFinite(p.st_h)||Number.isFinite(p.st_a))&&(Math.abs(p.st_h||0)>=0.05||Math.abs(p.st_a||0)>=0.05)?`<span class="mchip" title="本場先發相對聯盟平均先發,對分差的淨影響(正=偏向主隊)">先發效應 <b>${((p.st_a||0)-(p.st_h||0))>=0?'+':''}${((p.st_a||0)-(p.st_h||0)).toFixed(2)}</b></span>`:''}<span class="mchip">總分 <b>${p.exp_home!=null?(p.exp_home+p.exp_away).toFixed(1):'-'}</b></span>${(()=>{
       const b=marginBands(p.raw_margin!=null?Math.abs(p.raw_margin*MARGIN_K):null,p.sig_scale);
       return b?`<span class="mchip bandchip">落點 <b>敗${(b[0]*100).toFixed(0)}</b>·<b>勝1 ${(b[1]*100).toFixed(0)}</b>·<b>勝2 ${(b[2]*100).toFixed(0)}</b>·<b>3+ ${(b[3]*100).toFixed(0)}%</b></span>`:'';
     })()}<span class="mchip pickchip">預測 <span class="pick">${esc(p.predicted_winner)}</span> 勝 <b>${Math.max(hp,ap)}%</b></span>${(()=>{
