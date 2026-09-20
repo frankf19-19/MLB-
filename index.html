@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.65 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.66 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2970,6 +2970,23 @@ async function fetchInjury(pid,season){
   }catch(e){}
   return {...il,lastGame};
 }
+const _favInjCache={};
+function favInjuryLine(pid,el){
+  const season=+etToday().slice(0,4);
+  const p=_favInjCache[pid]||(_favInjCache[pid]=fetchInjury(pid,season).catch(()=>null));
+  p.then(inj=>{
+    if(!inj||!el||!document.contains(el))return;
+    const today=etToday();
+    const dayDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+    const startDate=inj.retro?new Date(inj.retro).toISOString().slice(0,10):inj.date;
+    const out=inj.lastGame?dayDiff(inj.lastGame,today):(startDate?dayDiff(startDate,today):null);
+    const earliest=(startDate&&inj.days)?shiftDate(startDate,inj.days):null;
+    const zh=injZh(inj.why||inj.desc)||'受傷';
+    const eta=earliest?(earliest<=today?'已達最短期限':`最快 ${earliest.slice(5).replace('-','/')}`):'';
+    el.innerHTML=`🩹 <b>${esc(zh)}</b>${inj.days?`·${inj.days}天IL`:''}${out!=null?`·缺陣 ${out} 天`:''}${eta?`·${esc(eta)}`:''}`;
+    el.style.color='var(--miss)';
+  });
+}
 function injuryBanner(pid,season){
   fetchInjury(pid,season).then(inj=>{
     if(!inj)return;
@@ -4210,6 +4227,7 @@ async function updateFavToday(games,date,force){
           el.style.color=((b.hits||0)>=2||b.homeRuns)?'var(--teal)':'var(--ink2)';
         }else{
           el.textContent=live?'尚未上場':`${lab} 未上場`;el.style.color='var(--muted)';
+          favInjuryLine(f.id,el);
         }
       }catch(e){el.textContent='';}
     }
