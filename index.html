@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.64 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.65 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -2941,6 +2941,53 @@ async function fetchStatcast(pid,yr){
   });
   _scCache[pid]=out;return out;
 }
+/* 🩹 傷兵狀態:官方異動紀錄(IL 放置/啟用)+ 最後出賽日 */
+const INJ_ZH=[['oblique','斜方肌'],['hamstring','腿後肌'],['ucl','手肘韌帶(UCL)'],['tommy john','Tommy John 手術'],['elbow','手肘'],['shoulder','肩膀'],['forearm','前臂'],['lat ','背闊肌'],['biceps','二頭肌'],['triceps','三頭肌'],['rotator','旋轉肌'],['knee','膝蓋'],['ankle','腳踝'],['back','背部'],['wrist','手腕'],['concussion','腦震盪'],['calf','小腿'],['groin','鼠蹊'],['hip','髖部'],['finger','手指'],['thumb','拇指'],['quad','股四頭肌'],['rib','肋部'],['foot','足部'],['hand','手部'],['neck','頸部'],['blister','水泡'],['illness','疾病'],['fracture','骨折'],['sprain','扭傷'],['strain','拉傷'],['inflammation','發炎'],['soreness','痠痛'],['surgery','手術'],['contusion','挫傷'],['tendinitis','肌腱炎'],['impingement','夾擠']];
+function injZh(s){const low=(s||'').toLowerCase();const hits=INJ_ZH.filter(([en])=>low.includes(en)).map(([,zh])=>zh);return hits.length?[...new Set(hits)].join(''):'';}
+async function fetchInjury(pid,season){
+  const today=etToday();
+  const start=shiftDate(today,-150);
+  const d=await jget(`${API}/transactions?playerId=${pid}&startDate=${start}&endDate=${today}`);
+  const tx=(d.transactions||[]).filter(t=>t.person?.id==pid).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  let il=null;
+  tx.forEach(t=>{
+    const desc=t.description||'';
+    if(/injured list/i.test(desc)&&/placed/i.test(desc)){
+      const days=parseInt((desc.match(/(\d+)-day/i)||[])[1])||null;
+      const retro=(desc.match(/retroactive to ([A-Za-z]+ \d{1,2}, \d{4})/)||[])[1];
+      const why=(desc.split(/injured list[^.]*\.\s*/i)[1]||desc.split('.').slice(1).join('.')).trim().replace(/\.$/,'');
+      il={date:t.date||t.effectiveDate,days,retro,why,desc};
+    }else if(/transferred/i.test(desc)&&/injured list/i.test(desc)&&il){
+      const nd=parseInt((desc.match(/to the (\d+)-day/i)||[])[1]);if(nd)il.days=nd;il.transferred=true;
+    }else if(/activated|reinstated/i.test(desc)&&/injured list/i.test(desc)){il=null;}
+  });
+  if(!il)return null;
+  let lastGame=null;
+  try{
+    const g=await jget(`${API}/people/${pid}/stats?stats=gameLog&season=${season}`);
+    const sp=(g.stats||[]).flatMap(s=>s.splits||[]).filter(s=>s.date&&s.date<=today);
+    if(sp.length)lastGame=sp[sp.length-1].date;
+  }catch(e){}
+  return {...il,lastGame};
+}
+function injuryBanner(pid,season){
+  fetchInjury(pid,season).then(inj=>{
+    if(!inj)return;
+    const el=$('playerDetail');if(!el)return;
+    const today=etToday();
+    const dayDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+    const startDate=inj.retro?new Date(inj.retro).toISOString().slice(0,10):inj.date;
+    const out=inj.lastGame?dayDiff(inj.lastGame,today):(startDate?dayDiff(startDate,today):null);
+    const earliest=(startDate&&inj.days)?shiftDate(startDate,inj.days):null;
+    const zh=injZh(inj.why||inj.desc);
+    const eta=earliest?(earliest<=today?`已達 ${inj.days} 天最短期限(${earliest}),回歸視復健進度與球隊公告`:`最快回歸約 ${earliest}(${inj.days} 天 IL 最短期限)`):'回歸時程未定';
+    el.insertAdjacentHTML('afterbegin',`<div class="analysis" style="border-left-color:var(--miss);margin-bottom:12px">
+      <span class="k" style="color:var(--miss)">🩹 傷兵名單</span>
+      ${zh?`<b>${esc(zh)}</b> · `:''}${esc(inj.why||'')}${inj.days?` · ${inj.days} 天 IL${inj.transferred?'(已轉入)':''}`:''}${startDate?` · ${esc(startDate)} 起${inj.retro?'(追溯)':''}`:''}
+      <br>${out!=null?`已缺陣 <b>${out}</b> 天${inj.lastGame?`(最後出賽 ${esc(inj.lastGame)})`:''} · `:''}${esc(eta)}。
+    </div>`);
+  }).catch(()=>{});
+}
 function enrichArsenal(pid,yr,rows){
   fetchStatcast(pid,yr).then(sc=>{
     rows.forEach((r,i)=>{
@@ -3058,6 +3105,7 @@ async function showPlayer(pid,fromPop){
     const tl=$('pdTeam');
     if(tl&&p.currentTeam?.id)tl.addEventListener('click',()=>showTeam(p.currentTeam.id,tn));
     if(arsenal&&arsenal.length)enrichArsenal(pid,season,arsenal);
+    injuryBanner(pid,season);
     const fb=$('favBtnP');
     if(fb)fb.addEventListener('click',()=>{
       const on=favToggleP(pid,p.fullName);
