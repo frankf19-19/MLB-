@@ -341,7 +341,7 @@ async function fetchLineupRatio(g,exMap,asOf){
       if(!(isFinite(o.sOPS)&&o.sOPS>0))return null;
       const r2=recMap[o.id];
       if(!r2)return o.sOPS;
-      const w=Math.min(0.35,r2.ab/(r2.ab+60));
+      const w=Math.min(0.50,r2.ab/(r2.ab+60));
       return o.sOPS*(1-w)+r2.ops*w;
     };
     const calc=side=>{
@@ -357,7 +357,7 @@ async function fetchLineupRatio(g,exMap,asOf){
     };
   }catch(e){return null;}
 }
-const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.06,Math.min(0.06,(r-1)*0.5));};
+const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.10,Math.min(0.10,(r-1)*1.0));};
 
 /* ⑪ 球隊偏差校正(與網頁版一致) */
 function computeTeamBias(ledger,K){
@@ -381,7 +381,7 @@ function computeTeamBias(ledger,K){
     const bS=(S.s/S.n)*S.n/(S.n+100);
     const R=accR[nm];
     const bR=(R&&R.n>=10)?(R.s/R.n)*R.n/(R.n+40):bS;
-    out[nm]=Math.max(-0.35,Math.min(0.35,bS*0.4+bR*0.6));
+    out[nm]=Math.max(-0.35,Math.min(0.35,bS*0.7+bR*0.3));
   });
   return out;
 }
@@ -433,7 +433,7 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
     return base*rF;
   };
   const hPl=mixPl(exH,aSt?.hand,'h',hOff),aPl=mixPl(exA,hSt?.hand,'a',aOff);
-  const venMix=(base,split)=>isFinite(split)?base*0.8+split*0.2:base;
+  const venMix=(base,split)=>isFinite(split)?base*0.9+split*0.1:base;
   const hOffV=venMix(hPl,exH.homeRSg),aOffV=venMix(aPl,exA.awayRSg);
   const hDefV=venMix(hDef,exH.homeRAg),aDefV=venMix(aDef,exA.awayRAg);
   const luH=Math.max(.925,Math.min(1.075,1+(luAdj(g.luH)-1)*luW));
@@ -517,7 +517,7 @@ function predict(g,pm,lg,ps,ex,teamBias,tune){
   FT.bias=0;
   if(teamBias){
     let b=(teamBias[g.home]||0)-(teamBias[g.away]||0);
-    b=Math.max(-0.55,Math.min(0.55,b));
+    b=Math.max(-0.35,Math.min(0.35,b));
     expHome+=b/2;expAway-=b/2;
     FT.bias=b;
   }
@@ -541,7 +541,8 @@ function processSig(g){
 }
 function classifyMiss(g,p,K,SIG){
   const favHome=(p.mPre||0)>=0;
-  const prob=Math.max(.05,Math.min(.95,normCdf(p.mPre*K/(SIG*sigScaleOf(p.tot)))));
+  let prob=Math.max(.05,Math.min(.95,normCdf(p.mPre*K/(SIG*sigScaleOf(p.tot)))));
+  prob=prob>0.70?0.70+(prob-0.70)*0.85:(prob<0.30?0.30-(0.30-prob)*0.85:prob);
   const conf=Math.max(prob,1-prob);
   const hR=g.homeScore??0,aR=g.awayScore??0;
   const mid=(p.expHome+p.expAway)/2,half=p.mPre/2*K;
