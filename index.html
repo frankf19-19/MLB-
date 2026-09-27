@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.66 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.67 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1087,7 +1087,7 @@ async function fetchLineupRatio(g,ex){
       if(!(isFinite(o.sOPS)&&o.sOPS>0))return null;
       const r2=recMap[o.id];
       if(!r2)return o.sOPS;
-      const w=Math.min(0.35,r2.ab/(r2.ab+60));  // 近況權重上限35%
+      const w=Math.min(0.50,r2.ab/(r2.ab+60));  // 近況權重上限35%
       return o.sOPS*(1-w)+r2.ops*w;
     };
     const calc=side=>{
@@ -1106,7 +1106,7 @@ async function fetchLineupRatio(g,ex){
     lineupCache[g.id]={_retry:Date.now()};return null;
   }catch(e){lineupCache[g.id]={_retry:Date.now()};return null;}
 }
-const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.06,Math.min(0.06,(r-1)*0.5));};
+const luAdj=r=>{if(!Number.isFinite(r)||r<=0)return 1;return 1+Math.max(-0.10,Math.min(0.10,(r-1)*1.0));};
 
 /* ⑪ 球隊偏差校正:從紀錄簿殘差學習(收縮 n/(n+100),封頂±0.25) */
 let _teamBias=null;
@@ -1131,7 +1131,7 @@ function computeTeamBias(){
     const bS=(S.s/S.n)*S.n/(S.n+100);          // 整季基底(重收縮)
     const R=accR[nm];
     const bR=(R&&R.n>=10)?(R.s/R.n)*R.n/(R.n+40):bS; // 近30天劇變(中收縮)
-    _teamBias[nm]=Math.max(-0.35,Math.min(0.35,bS*0.4+bR*0.6));
+    _teamBias[nm]=Math.max(-0.35,Math.min(0.35,bS*0.7+bR*0.3));
   });
 }
 
@@ -1191,7 +1191,7 @@ function predict(g,pm,lg,ps,ex){
   const hLu=luPlat('h',aSt?.hand), aLu=luPlat('a',hSt?.hand);
   const hPl=blendPl(hPl0,hLu,hOff.v)||hPl0, aPl=blendPl(aPl0,aLu,aOff.v)||aPl0;
   // ③ 主客場拆分:主隊用主場數據、客隊用客場數據各混 20%
-  const venMix=(base,split)=>isFinite(split)?base*0.8+split*0.2:base;
+  const venMix=(base,split)=>isFinite(split)?base*0.9+split*0.1:base;
   const hOffV=venMix(hPl.v,exH.homeRSg), aOffV=venMix(aPl.v,exA.awayRSg);
   const hDefV=venMix(hDef.v,exH.homeRAg), aDefV=venMix(aDef.v,exA.awayRAg);
 
@@ -1319,7 +1319,7 @@ function predict(g,pm,lg,ps,ex){
   let biasAdj=0;
   if(_teamBias){
     biasAdj=(_teamBias[g.home]||0)-(_teamBias[g.away]||0);
-    biasAdj=Math.max(-0.55,Math.min(0.55,biasAdj));
+    biasAdj=Math.max(-0.35,Math.min(0.35,biasAdj));
     if(biasAdj>0)expHome+=biasAdj/2,expAway-=biasAdj/2;
     else if(biasAdj<0)expHome+=biasAdj/2,expAway-=biasAdj/2;
   }
@@ -1337,7 +1337,8 @@ function predict(g,pm,lg,ps,ex){
   if(_rc){rcAdj=Math.max(-1.2,Math.min(1.2,_fArr.reduce((s,f,k)=>s+f*_rc[k],0)));expHome+=rcAdj/2;expAway-=rcAdj/2;}
   const margin=expHome-expAway;
   const sigScale=Math.max(.90,Math.min(1.10,Math.pow(((expHome+expAway)||8.6)/8.6,0.35)));
-  const hp=Math.max(.05,Math.min(.95,normCdf(margin/(RUN_SIGMA*sigScale))));
+  let hp=Math.max(.05,Math.min(.95,normCdf(margin/(RUN_SIGMA*sigScale))));
+  hp=hp>0.70?0.70+(hp-0.70)*0.85:(hp<0.30?0.30-(0.30-hp)*0.85:hp);  // 尾端信心收縮(整季 75%+ 桶 -6.4%)
   let hs=Math.round(expHome),as=Math.round(expAway);
   if(margin>=0&&hs<=as)hs=as+1; if(margin<0&&as<=hs)as=hs+1;
   const fav=margin>=0?g.home:g.away;
