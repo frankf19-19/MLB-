@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.67 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.68 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -676,7 +676,10 @@ function taipeiTime(iso){try{return new Date(iso).toLocaleString('zh-TW',{timeZo
 /* ---------- 資料抓取 ---------- */
 async function fetchStandingsAsOf(date){
   const season=+date.slice(0,4);
-  const d=await jget(`${API}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason&date=${date}`);
+  let d=await jget(`${API}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason&date=${date}`);
+  // 季後賽日期官方回傳空表 → 改用例行賽最終戰績
+  const cnt=(d.records||[]).reduce((s,r)=>s+(r.teamRecords||[]).length,0);
+  if(cnt<20)d=await jget(`${API}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason`);
   const m={};
   (d.records||[]).forEach(rec=>(rec.teamRecords||[]).forEach(t=>{
     const w=t.wins||0,l=t.losses||0,gp=t.gamesPlayed||(w+l)||0;
