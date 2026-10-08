@@ -36,7 +36,10 @@ const ipOuts=s=>{const p=String(s||'0').split('.');return (parseInt(p[0])||0)*3+
 /* ---------- 資料抓取(與網頁版一致) ---------- */
 async function fetchStandingsAsOf(date){
   const y=+date.slice(0,4);
-  const d=await jget(`${API}/standings?leagueId=103,104&season=${y}&standingsTypes=regularSeason&date=${date}`);
+  let d=await jget(`${API}/standings?leagueId=103,104&season=${y}&standingsTypes=regularSeason&date=${date}`);
+  // 季後賽日期官方回傳空表 → 改用例行賽最終戰績
+  const cnt=(d.records||[]).reduce((s,r)=>s+(r.teamRecords||[]).length,0);
+  if(cnt<20)d=await jget(`${API}/standings?leagueId=103,104&season=${y}&standingsTypes=regularSeason`);
   const pm={};
   (d.records||[]).forEach(rec=>(rec.teamRecords||[]).forEach(t=>{
     pm[t.team.id]={w:t.wins,l:t.losses,pct:parseFloat(t.winningPercentage)||.5,
