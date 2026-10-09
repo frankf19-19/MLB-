@@ -566,11 +566,18 @@ function classifyMiss(g,p,K,SIG){
 (async()=>{
   const today=etToday(),yesterday=shiftDate(today,-1);
   const season=+today.slice(0,4);
+  let _runAdded=0,_runFinals=0;
   let state={sigma:4.3,k:1.0,hist:[],ledger:[],last:null};
   try{state=Object.assign(state,JSON.parse(fs.readFileSync(FILE,'utf8')));}catch(e){console.log('無現存 calib.json,首次建立');}
   // 一次性遷移:帶位命中改精確制(2026-08-27 起);舊容差制數據留白,避免圖表混尺假斷崖
   (state.hist||[]).forEach(r=>{if(r.d&&r.d<'2026-08-27'&&r.bh!=null)r.bh=null;});
   let start=state.last?shiftDate(state.last,1):shiftDate(yesterday,-(BOOTSTRAP_DAYS-1));
+  // 斷流自癒:若紀錄簿最後記帳日落後 state.last,表示中間有日期跑過但零記帳 → 從最後記帳日+1 重跑補齊
+  const lastLedgerDay=state.ledger.length?state.ledger.reduce((m,x)=>x.d>m?x.d:m,''):null;
+  if(lastLedgerDay&&shiftDate(lastLedgerDay,1)<start){
+    console.log(`斷流偵測:紀錄簿止於 ${lastLedgerDay},游標在 ${state.last} → 回溯重跑`);
+    start=shiftDate(lastLedgerDay,1);
+  }
   if(start>yesterday){console.log('無新日期需處理');}
   const ex=await fetchTeamExtras(season,yesterday);
   const teamBias=computeTeamBias(state.ledger,state.k);
@@ -607,9 +614,10 @@ function classifyMiss(g,p,K,SIG){
       const pitIds=[...new Set(games.flatMap(g=>[g.awayPitId,g.homePitId]).filter(Boolean))];
       const ps=await fetchPitcherStats(pitIds,season,asOf);
       const ex2=Object.assign({},ex,{fatigue:fat});
-      let added=0;
+      let added=0,finalsSeen=0;
       for(const g of games){
         if(g.status!=='Final')continue;
+        finalsSeen++;_runFinals++;
         if(/postpon|suspend|cancel/i.test(g.detail||''))continue;
         const homeWon=g.homeWin?true:(g.awayWin?false:null);if(homeWon==null)continue;
         if(seen.has(g.id))continue;
@@ -631,7 +639,7 @@ function classifyMiss(g,p,K,SIG){
           m:+p.mPre.toFixed(2),am:(g.homeScore??0)-(g.awayScore??0),hit,
           t:+p.tot.toFixed(1),f:p.f,pf:processSig(g),sp:[g.awayPitId||null,g.homePitId||null],pt:g._pit||null,po:(g.gameType&&g.gameType!=='R')?1:0,
           cat:hit?undefined:classifyMiss(g,p,state.k,state.sigma)});
-        seen.add(g.id);added++;
+        seen.add(g.id);added++;_runAdded++;
       }
       console.log(`${date}: +${added} 場`);
     }catch(e){console.log(`${date}: 跳過(${e.message})`);}
@@ -725,6 +733,7 @@ function classifyMiss(g,p,K,SIG){
     const gaps=[];for(let i=1;i<ds.length;i++){const g=(new Date(ds[i])-new Date(ds[i-1]))/864e5;if(g>2&&ds[i]>'2026-07-20')gaps.push(`${ds[i-1]}→${ds[i]}`);}
     if(gaps.length)warn.push(`排程斷日:${gaps.slice(-2).join('、')}`);
     if(!Number.isFinite(state.k)||state.k<0.3||state.k>1.4){warn.push(`K=${state.k} 異常,已重置 1.0`);state.k=1.0;fixed.push('K 重置');}
+    if(_runFinals>0&&_runAdded===0)warn.push(`本次有 ${_runFinals} 場完賽但零記帳——預測資料源可能異常`);
     state.health={d:today,ledger:state.ledger.length,starterFill:rec.length?Math.round(stFill/rec.length*100):null,
       lineupFill:rec.length?Math.round(luFill/rec.length*100):null,rc:!!state.rc,fixed,warn};
     console.log(`系統自檢:先發層 ${state.health.starterFill}%、名單層 ${state.health.lineupFill}%、自動修復 ${fixed.length} 項、警示 ${warn.length} 項${warn.length?' → '+warn.join(' | '):''}`);
