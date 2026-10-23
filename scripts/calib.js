@@ -6,6 +6,9 @@
 const fs=require('fs');
 const API='https://statsapi.mlb.com/api/v1';
 const FILE='calib.json';
+const BOXFILE='box.json';   // 🧾 全場完整紀錄(打者/投手全員/打序),獨立檔案避免 calib.json 膨脹
+let BOXES={};
+try{BOXES=JSON.parse(fs.readFileSync(BOXFILE,'utf8'))||{};}catch(e){BOXES={};}
 const FIT_DAYS=60;          // 校準擬合窗口
 const BOOTSTRAP_DAYS=75;    // 首次執行回補天數
 const HOME_RUN_BOOST=0.20;
@@ -269,24 +272,29 @@ async function fetchWxTemp(teamId,tsIso){
   }catch(e){return null;}
 }
 
+
+/* 🧾 完整 boxscore 萃取(投手全員/打者全員/打序),供紀錄簿與 box.json */
+function fullBox(box){
+  const pt={},bt={},lu={};
+  const ipOuts=ip=>{const a=String(ip||'0.0').split('.');return (parseInt(a[0])||0)*3+(parseInt(a[1])||0);};
+  ['away','home'].forEach(side=>{
+    const t=box.teams?.[side];if(!t)return;const k=side==='away'?'a':'h';
+    pt[k]=(t.pitchers||[]).map(id=>{const s=t.players?.['ID'+id]?.stats?.pitching||{};
+      return [id,ipOuts(s.inningsPitched),s.runs||0,s.earnedRuns||0,s.hits||0,s.strikeOuts||0,s.baseOnBalls||0,s.numberOfPitches||s.pitchesThrown||0,s.homeRuns||0];});
+    bt[k]=Object.values(t.players||{}).filter(p=>p.stats?.batting&&((p.stats.batting.plateAppearances||0)>0)).map(p=>{const s=p.stats.batting;
+      return [p.person?.id,p.position?.abbreviation||'',s.atBats||0,s.runs||0,s.hits||0,s.homeRuns||0,s.rbi||0,s.baseOnBalls||0,s.strikeOuts||0,s.stolenBases||0];});
+    lu[k]=(t.battingOrder||[]).slice(0,9);
+  });
+  if(!(pt.a?.length||pt.h?.length||bt.a?.length||bt.h?.length))return null;
+  return {pt,bt,lu};
+}
+
 /* ⑫ 當日打線名單(與網頁版一致;回測用實際先發九人) */
 async function fetchLineupRatio(g,exMap,asOf){
   try{
     const box=await jget(`${API}/game/${g.id}/boxscore`);
-    // 🧾 全體登板投手紀錄(先發/中繼/守護神,依登板序):[id, 出局數, 失分]
-    try{
-      const pit={};
-      ['away','home'].forEach(side=>{
-        const t=box.teams?.[side];
-        pit[side==='away'?'a':'h']=(t?.pitchers||[]).map(id=>{
-          const s=t.players?.['ID'+id]?.stats?.pitching||{};
-          const ipS=String(s.inningsPitched||'0.0').split('.');
-          const outs=(parseInt(ipS[0])||0)*3+(parseInt(ipS[1])||0);
-          return [id,outs,s.runs||0];
-        });
-      });
-      if(pit.a.length||pit.h.length)g._pit=pit;
-    }catch(e){}
+    // 🧾 全場完整紀錄:投手 [id,出局,失分,自責,被安打,K,BB,用球數,被全壘打];打者 [id,守位,AB,R,H,HR,RBI,BB,K,SB];打序九人 id
+    try{const fb=fullBox(box);if(fb){g._pit=fb.pt;BOXES[g.id]={d:asOf||null,aw:g.away,hm:g.home,pt:fb.pt,bt:fb.bt,lu:fb.lu};}}catch(e){}
     const orders={};
     ['away','home'].forEach(side=>{
       const t=box.teams?.[side];const order=t?.battingOrder||[];
@@ -391,7 +399,8 @@ function computeTeamBias(ledger,K){
 
 /* ---------- 預測模型(與網頁版一致,回傳 pre-K 分差與期望分) ---------- */
 function predict(g,pm,lg,ps,ex,teamBias,tune){
-  const stW=(tune&&tune.stW)||1, bpW=(tune&&tune.bpW)||1, luW=(tune&&tune.luW)||1;
+  const _isPOw=!!(g.gameType&&g.gameType!=='R');
+  const stW=((tune&&tune.stW)||1)*(_isPOw?0.90:1), bpW=((tune&&tune.bpW)||1)*(_isPOw?1.15:1), luW=(tune&&tune.luW)||1;
   const H=pm[g.homeId]||{},A=pm[g.awayId]||{};
   if(!(lg&&H.rs!=null&&H.ra!=null&&H.gp&&A.rs!=null&&A.ra!=null&&A.gp))return null;
   const hRS=H.rs/H.gp,hRA=H.ra/H.gp,aRS=A.rs/A.gp,aRA=A.ra/A.gp;
@@ -710,6 +719,21 @@ function classifyMiss(g,p,K,SIG){
     const corr=y.reduce((s,t,i)=>s+Math.abs(t-X[i].reduce((q,f,k)=>q+f*state.rc[k],0)),0)/y.length;
     console.log(`殘差修正器:${wf.length} 場擬合,係數 [${state.rc.join(',')}],樣本內 MAE ${base.toFixed(3)}→${corr.toFixed(3)}`);
   })();
+
+  // 🧾 歷史回填:紀錄簿中尚無完整 box 的比賽,每次最多補 80 場(季後賽優先、新→舊),直到整季齊全 → box.json
+  {
+    const need=state.ledger.filter(x=>x.id&&!BOXES[x.id]).sort((a,b)=>((b.po||0)-(a.po||0))||(a.d<b.d?1:-1)).slice(0,80);
+    let ok=0;
+    for(const x of need){
+      try{const box=await jget(`${API}/game/${x.id}/boxscore`);const fb=fullBox(box);
+        BOXES[x.id]=fb?{d:x.d,aw:x.aw,hm:x.hm,pt:fb.pt,bt:fb.bt,lu:fb.lu}:{d:x.d,aw:x.aw,hm:x.hm,empty:1};
+        if(fb){x.pt=fb.pt;ok++;}}catch(e){}
+    }
+    const left=state.ledger.filter(x=>x.id&&!BOXES[x.id]).length;
+    if(need.length)console.log(`完整 box 回填:本次 ${ok}/${need.length} 場,尚餘 ${left} 場`);
+    state.boxFill={games:Object.keys(BOXES).length,left};
+    fs.writeFileSync(BOXFILE,JSON.stringify(BOXES));
+  }
 
   // 🩺 系統自檢自癒:資料管線體檢,能修的自己修,修不了的寫進 health 給人看
   (()=>{

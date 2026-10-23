@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.68 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.70 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1227,7 +1227,9 @@ function predict(g,pm,lg,ps,ex){
   };
   const hStV=venueEra(hSt,'h'), aStV=venueEra(aSt,'a');
   const _tn=(window._cloud&&window._cloud.tune)||{};
-  const stW=_tn.stW||1, bpW=_tn.bpW||1;
+  // 🏆 季後賽牛棚權重:2026 季後賽實測牛棚局數占比 53%(例行賽 48%),先發局數下降 → 先發層×0.90、牛棚層×1.15
+  const _isPOw=!!(g.gameType&&g.gameType!=='R');
+  const stW=(_tn.stW||1)*(_isPOw?0.90:1), bpW=(_tn.bpW||1)*(_isPOw?1.15:1);
   const dHome=stAdj(hStV), dAway=stAdj(aStV);
   const gd0=(g.ts||'').slice(0,10);
   const restInfo=st2=>{
@@ -1370,7 +1372,7 @@ function predict(g,pm,lg,ps,ex){
   else if(luA>=1.015)luNotes.push(`客隊今日名單火力較強(×${luA.toFixed(2)})`);
   if(luNotes.length)why+=`當日打線:${luNotes.join('、')}。`;
   if(Math.abs(wxAdj)>=0.15)why+=`天氣:開賽氣溫約 ${g.wxTemp.toFixed(0)}°C,${wxAdj>0?'炎熱有利進攻':'低溫壓抑攻勢'}(總分 ${wxAdj>0?'+':''}${wxAdj.toFixed(1)})。`;
-  if(isPO)why+=`季後賽模式:得分環境下修 8%、短休先發視為常態、季後賽獨立記帳不影響例行賽校準。`;
+  if(isPO)why+=`季後賽模式:得分環境下修 8%、牛棚層加權 ×1.15(季後賽牛棚吃 53% 局數,先發層 ×0.90)、短休先發視為常態、季後賽獨立記帳不影響例行賽校準。`;
   if(Math.abs(rcAdj)>=0.05)why+=`殘差修正器:依 ${(window._cloud&&window._cloud.ledger)?window._cloud.ledger.filter(x=>x.f).length:'數百'} 場回歸,判定各層合計${rcAdj>0?'低估主隊':'高估主隊'},修正 ${rcAdj>0?'+':''}${rcAdj.toFixed(2)} 分。`;
   if(Math.abs(famAdjA)>=0.03)why+=`打線熟悉度:客隊全隊對此先發生涯打擊${famAdjA>0?'偏優':'偏弱'},微調(${famAdjA>0?'+':''}${famAdjA.toFixed(2)})。`;
   if(Math.abs(famAdjH)>=0.03)why+=`打線熟悉度:主隊全隊對此先發生涯打擊${famAdjH>0?'偏優':'偏弱'},微調(${famAdjH>0?'+':''}${famAdjH.toFixed(2)})。`;
