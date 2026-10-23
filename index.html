@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.72 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.73 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -1446,7 +1446,7 @@ function bandReview(p,actMargin){
     const lab6=i6<=2?`【${FAV_BAND6_ZH[i6]}】(遭爆冷輸 ${Math.abs(favAct)} 分)`:`【${FAV_BAND6_ZH[i6]}】`;
     const mu3=Math.abs((p.raw_margin||0)*MARGIN_K);
     const call=(i6>=3)?`帶位判定:預測【${BAND_TXT[predBandOf(mu3)]}】(分差 ${mu3.toFixed(1)}),實際【${BAND_TXT[favBandOf(favAct)]}】${predBandOf(mu3)===favBandOf(favAct)?'✓ 精確命中':'✗'}。`:'';
-    return `${call}${call?'<br>':''}勝分差落點(六帶位):預測隊實際${lab6},模型賽前 ${FAV_BAND6_ZH.map((z,k)=>`${z} ${(b6[k]*100).toFixed(0)}%`).join('/')},實際落格賽前機率 ${(b6[i6]*100).toFixed(0)}%。`;
+    return `${call}${call?' ':''}勝分差落點(六帶位):預測隊實際${lab6},模型賽前 ${FAV_BAND6_ZH.map((z,k)=>`${z} ${(b6[k]*100).toFixed(0)}%`).join('/')},實際落格賽前機率 ${(b6[i6]*100).toFixed(0)}%。`;
   }
   const lab=idx===0?`遭爆冷(輸 ${Math.abs(favAct)} 分)`:FAV_BAND_ZH[idx];
   return `勝分差落點:預測隊實際${lab},模型賽前給 敗${(bp[0]*100).toFixed(0)}%/勝1分${(bp[1]*100).toFixed(0)}%/勝2分${(bp[2]*100).toFixed(0)}%/勝3+${(bp[3]*100).toFixed(0)}%${hitBand?'(最看好帶位命中✓)':''}。`;
