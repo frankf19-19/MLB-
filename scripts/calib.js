@@ -720,9 +720,9 @@ function classifyMiss(g,p,K,SIG){
     console.log(`殘差修正器:${wf.length} 場擬合,係數 [${state.rc.join(',')}],樣本內 MAE ${base.toFixed(3)}→${corr.toFixed(3)}`);
   })();
 
-  // 🧾 歷史回填:紀錄簿中尚無完整 box 的比賽,每次最多補 80 場(季後賽優先、新→舊),直到整季齊全 → box.json
+  // 🧾 歷史回填:紀錄簿中尚無完整 box 的比賽,每次最多補 300 場(季後賽優先、新→舊),直到整季齊全 → box.json
   {
-    const need=state.ledger.filter(x=>x.id&&!BOXES[x.id]).sort((a,b)=>((b.po||0)-(a.po||0))||(a.d<b.d?1:-1)).slice(0,80);
+    const need=state.ledger.filter(x=>x.id&&!BOXES[x.id]).sort((a,b)=>((b.po||0)-(a.po||0))||(a.d<b.d?1:-1)).slice(0,300);
     let ok=0;
     for(const x of need){
       try{const box=await jget(`${API}/game/${x.id}/boxscore`);const fb=fullBox(box);
