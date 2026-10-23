@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.70 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.71 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -692,7 +692,7 @@ async function fetchGames(date,lite){
   const out=[];
   (d.dates||[]).forEach(dt=>(dt.games||[]).forEach(g=>{
     const h=g.teams.home,a=g.teams.away,ls=g.linescore||{};
-    out.push({id:g.gamePk,ts:g.gameDate,status:g.status?.abstractGameState||'',detail:g.status?.detailedState||'',
+    out.push({id:g.gamePk,date:dt.date,ts:g.gameDate,status:g.status?.abstractGameState||'',detail:g.status?.detailedState||'',
       away:a.team.name,home:h.team.name,awayId:a.team.id,homeId:h.team.id,
       awayScore:a.score,homeScore:h.score,awayWin:a.isWinner,homeWin:h.isWinner,
       awayPit:a.probablePitcher?.fullName,homePit:h.probablePitcher?.fullName,
@@ -1660,6 +1660,7 @@ function gameCard(g,p,rv){
     ${la?`<div class="why" style="border-top:none;margin-top:8px;padding-top:0"><span class="k" style="color:var(--amber)">即時戰況</span>${esc(la.text)}</div>`:''}
     ${((isLive||isFinal)&&g.scoring&&g.scoring.length)?`<div class="why"${la?' style="border-top:none;margin-top:6px;padding-top:0"':''}><span class="k" style="color:var(--teal)">${isLive?'即時重點':'比賽重點'}</span>${g.scoring.slice(-2).map(s=>`<span class="pstat">[${s.inn}局${s.half==='top'?'上':'下'}]</span> ${esc(fixDesc(s.desc))}`).join('<br>')}</div>`:''}
     <div class="why"><span class="k">預測理由</span>${esc(p.why)}</div>
+    <div class="why brainNote" data-brain="${g.id}" data-aw="${esc(g.away)}" data-hm="${esc(g.home)}" data-d="${g.date||''}" data-ap="${g.awayPitId||''}" data-hp="${g.homePitId||''}" style="display:none"></div>
     ${rv?`<div class="review ${rv.hit?'good':'bad'}" id="rv-${g.id}"><span class="k">${rv.hit?'賽後檢討 ✓':'賽後檢討 ✗'}</span>${esc(rv.text)}<span id="rvx-${g.id}"></span></div>`:''}
   </div>`;
 }
@@ -1795,6 +1796,7 @@ async function loadDay(quiet){
       </div>`;
     }
     $('games').innerHTML=(spotHtml+focusHtml+html)||`<div class="empty">${date} 沒有排定的比賽(可能是明星賽或休兵日)。</div>`;
+    applyBrain();
     const _md=s=>s.slice(5).replace('-','/');
     $('listTitle').textContent=`${date} 比賽`;
     $('listTag2')&&0; // noop
@@ -2090,6 +2092,7 @@ async function fetchPtip(pid){
       rows.push(`<div class="trow">打擊 <b>${st.avg??'-'}</b>·<b>${st.homeRuns??0}</b> 轟·<b>${st.rbi??0}</b> 打點·OPS <b>${st.ops??'-'}</b>${(st.stolenBases|0)>=5?`·<b>${st.stolenBases}</b> 盜`:''}</div>`);
     }
   });
+  rows.push(...brainTipRows(pid));
   const html=`<div class="tnm">${esc(p.fullName||'')}${p.primaryPosition?.abbreviation?` <span style="font-weight:600;color:var(--muted)">${esc(p.primaryPosition.abbreviation)}</span>`:''}</div>${rows.join('')||'<div class="trow">本季樣本不足</div>'}`;
   _ptipCache[pid]=html;return html;
 }
@@ -3221,6 +3224,69 @@ $('calibBtn').addEventListener('click',()=>{
   if(!$('calibSec').classList.contains('hidden')){renderCalibHist();$('calibSec').scrollIntoView({behavior:'smooth'});}
 });
 let calibRunning=false;
+/* 🧠 大腦記憶:brain.json(雲端每日由本站完整比賽紀錄整理:投手近 12 次登板、打者近 10 場) */
+window._brain=null;
+async function loadBrain(){
+  try{const r=await fetch('brain.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d&&d.p)window._brain=d;}catch(e){}
+}
+const _ipTxt=o=>`${Math.floor(o/3)}.${o%3}`;
+const _mdTxt=d=>d?`${+d.slice(5,7)}/${+d.slice(8,10)}`:'';
+function brainName(pid){const n=window._brain?.n?.[pid];return n?n[0]:null;}
+function brainTipRows(pid){
+  const B=window._brain;if(!B)return [];const out=[];
+  const p=B.p?.[pid];
+  if(p&&p.g.length){
+    const g=p.g.slice(-5).reverse();
+    out.push(`<div class="trow" style="margin-top:4px"><b>近 ${g.length} 次登板</b>(本站紀錄)</div>`);
+    g.forEach(r=>out.push(`<div class="trow">${_mdTxt(r[0])} ${r[8]?'先發':'後援'} <b>${_ipTxt(r[1])}</b>局 <b>${r[2]}</b>失 ${r[4]}K ${r[5]}BB${r[6]?` ${r[6]}球`:''}</div>`));
+    const all=p.g,o=all.reduce((s,r)=>s+r[1],0),er=all.reduce((s,r)=>s+r[3],0);
+    if(o>=9)out.push(`<div class="trow">近 ${all.length} 次合計 ${_ipTxt(o)} 局 · 自責率 <b>${(er/(o/3)*9).toFixed(2)}</b></div>`);
+  }
+  const b=B.b?.[pid];
+  if(b&&b.g.length){
+    const g=b.g.slice(-5),ab=g.reduce((s,r)=>s+r[1],0),h=g.reduce((s,r)=>s+r[3],0),hr=g.reduce((s,r)=>s+r[4],0),rbi=g.reduce((s,r)=>s+r[5],0),k=g.reduce((s,r)=>s+r[7],0);
+    out.push(`<div class="trow" style="margin-top:4px"><b>近 ${g.length} 場</b>(本站紀錄)${ab?` <b>${h}</b>-${ab}`:''}${hr?` · ${hr} 轟`:''}${rbi?` · ${rbi} 打點`:''}${k?` · ${k} K`:''}</div>`);
+    out.push(`<div class="trow">${g.slice().reverse().map(r=>`${_mdTxt(r[0])} ${r[3]}-${r[1]}${r[4]?'(HR)':''}`).join(' · ')}</div>`);
+  }
+  return out;
+}
+/* 牛棚工作量(本站紀錄):昨日/連兩日登板的後援 */
+function brainBullpen(team,date){
+  const B=window._brain;if(!B||!date)return [];
+  const d1=shiftDate(date,-1),d2=shiftDate(date,-2),d3=shiftDate(date,-3);const out=[];
+  Object.entries(B.p).forEach(([pid,p])=>{
+    if(p.t!==team)return;const rel=p.g.filter(r=>!r[8]).length;if(rel<p.g.length*0.6)return;
+    const by=d=>p.g.find(r=>r[0]===d);const a1=by(d1),a2=by(d2),a3=by(d3);
+    if(!a1&&!a2)return;
+    let tag=null;
+    if(a1&&a2&&a3)tag=`三連投(${a1[6]+a2[6]+a3[6]} 球)`;
+    else if(a1&&a2)tag=`連兩日登板(${a1[6]+a2[6]} 球)`;
+    else if(a1&&a1[6]>=25)tag=`昨日 ${a1[6]} 球`;
+    if(tag)out.push({pid:+pid,name:brainName(pid)||('#'+pid),tag,heavy:!!(a3||(a1&&a2&&a1[6]+a2[6]>=40)||(a1&&a1[6]>=35))});
+  });
+  return out.sort((a,b)=>(b.heavy-a.heavy));
+}
+function brainStarterLine(pid){
+  const p=window._brain?.p?.[pid];if(!p)return null;const st=p.g.filter(r=>r[8]).slice(-3).reverse();if(!st.length)return null;
+  return st.map(r=>`${_mdTxt(r[0])} ${_ipTxt(r[1])}局${r[2]}失`).join('、');
+}
+function applyBrain(){
+  if(!window._brain)return;
+  document.querySelectorAll('.brainNote[data-brain]').forEach(el=>{
+    if(el.dataset.done)return;
+    const d=el.dataset.d,aw=el.dataset.aw,hm=el.dataset.hm;const parts=[];
+    const bpA=brainBullpen(aw,d),bpH=brainBullpen(hm,d);
+    const fmt=(team,list)=>list.length?`${team} 牛棚:${list.slice(0,4).map(x=>`<span class="pnm" data-pid="${x.pid}" style="cursor:pointer">${esc(x.name)}</span>${x.heavy?'⚠':''} ${esc(x.tag)}`).join('、')}${list.length>4?` 等 ${list.length} 人`:''}`:null;
+    [fmt(aw,bpA),fmt(hm,bpH)].filter(Boolean).forEach(t=>parts.push(t));
+    const sa=el.dataset.ap&&brainStarterLine(+el.dataset.ap),sh=el.dataset.hp&&brainStarterLine(+el.dataset.hp);
+    if(sa||sh)parts.push(`先發近況:${[sa?`${esc(brainName(el.dataset.ap)||'客隊先發')} ${sa}`:null,sh?`${esc(brainName(el.dataset.hp)||'主隊先發')} ${sh}`:null].filter(Boolean).join(';')}`);
+    const heavy=[...bpA,...bpH].filter(x=>x.heavy).length;
+    if(heavy)parts.push(`⚠ 標記者今日可能不出賽或狀態下滑;2026 回測顯示此訊號對牛棚失分無穩定影響,僅供參考、未納入計算。`);
+    if(parts.length){el.innerHTML=`<span class="k" style="color:var(--teal)">🧠 大腦記憶</span>${parts.join('<br>')}`;el.style.display='';}
+    el.dataset.done='1';
+  });
+}
+
 /* ☁ 雲端校準:讀取 Actions 每日產出的 calib.json,全裝置共用 */
 window._cloud=null;
 async function loadCloudCalib(){
@@ -4277,6 +4343,7 @@ $('prevBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,-1);loadD
 $('nextBtn').addEventListener('click',()=>{dp.value=shiftDate(dp.value,1);loadDay();});
 $('todayBtn').addEventListener('click',()=>{dp.value=etToday();loadDay();});
 dp.addEventListener('change',()=>loadDay());
+loadBrain().then(()=>applyBrain());
 loadCloudCalib().finally(()=>{computeTeamBias();computeMarginDist();loadDay().then(()=>autoCalibrate());});
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
 </script>

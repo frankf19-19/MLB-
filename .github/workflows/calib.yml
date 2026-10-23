@@ -22,7 +22,7 @@ jobs:
         run: |
           git config user.name "calib-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add calib.json box.json
+          git add calib.json box.json brain.json
           git diff --cached --quiet || git commit -m "每日自動校準 $(date -u +%F)"
           git pull --rebase origin main || true
           git push

@@ -735,6 +735,28 @@ function classifyMiss(g,p,K,SIG){
     fs.writeFileSync(BOXFILE,JSON.stringify(BOXES));
   }
 
+  // 🧠 大腦記憶 brain.json:每位球員近期出賽(本站自有紀錄:投手近 12 次登板、打者近 10 場),含姓名/守位,供網頁說明與提示
+  try{
+    const prevBox=(()=>{try{return JSON.parse(fs.readFileSync(`box-${season-1}.json`,'utf8'))||{};}catch(e){return {};}})();
+    const P={},Bt={};
+    const addG=g=>{if(!g.pt||!g.d)return;[['a',g.aw],['h',g.hm]].forEach(([k,team])=>{
+      (g.pt[k]||[]).forEach((x,i)=>{(P[x[0]]=P[x[0]]||[]).push([g.d,x[1],x[2],x[3],x[5],x[6],x[7],x[8],i===0?1:0,team]);});
+      (g.bt?.[k]||[]).forEach(b=>{(Bt[b[0]]=Bt[b[0]]||[]).push([g.d,b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],team]);});
+    });};
+    Object.values(prevBox).forEach(addG);Object.values(BOXES).forEach(addG);
+    const cur=new Set();Object.values(BOXES).forEach(g=>{if(!g.pt)return;['a','h'].forEach(k=>{(g.pt[k]||[]).forEach(x=>cur.add(x[0]));(g.bt?.[k]||[]).forEach(b=>cur.add(b[0]));});});
+    const trim=(M,n)=>{const o={};Object.entries(M).forEach(([id,rows])=>{if(!cur.has(+id))return;rows.sort((x,y)=>x[0]<y[0]?-1:1);const last=rows.slice(-n);o[id]={t:last[last.length-1][9],g:last.map(r=>r.slice(0,9))};});return o;};
+    const brain={updated:new Date().toISOString(),p:trim(P,12),b:trim(Bt,10),n:{}};
+    try{brain.n=(JSON.parse(fs.readFileSync('brain.json','utf8'))||{}).n||{};}catch(e){}
+    const needN=[...new Set([...Object.keys(brain.p),...Object.keys(brain.b)])].filter(id=>!brain.n[id]);
+    for(let i=0;i<needN.length;i+=100){
+      try{const d=await jget(`${API}/people?personIds=${needN.slice(i,i+100).join(',')}&fields=people,id,fullName,primaryPosition,abbreviation,pitchHand,code`);
+        (d.people||[]).forEach(x=>{brain.n[x.id]=[x.fullName||'',x.primaryPosition?.abbreviation||'',x.pitchHand?.code||''];});}catch(e){}
+    }
+    fs.writeFileSync('brain.json',JSON.stringify(brain));
+    console.log(`大腦記憶:投手 ${Object.keys(brain.p).length} 人、打者 ${Object.keys(brain.b).length} 人、姓名 ${Object.keys(brain.n).length} 筆(本次新查 ${needN.length})`);
+  }catch(e){console.log('大腦記憶建立失敗:',e.message);}
+
   // 🩺 系統自檢自癒:資料管線體檢,能修的自己修,修不了的寫進 health 給人看
   (()=>{
     const fixed=[],warn=[];
