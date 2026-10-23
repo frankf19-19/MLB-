@@ -653,7 +653,7 @@
     </section>
   </div>
 
-  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.71 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
+  <footer>本頁僅供興趣追蹤,非投注建議。<br>MLB 預測計分板 v11.72 · © 2026 frankf19-19 · 保留所有權利,未經授權請勿複製使用</footer>
 </div>
 
 <script>
@@ -3266,8 +3266,8 @@ function brainBullpen(team,date){
   });
   return out.sort((a,b)=>(b.heavy-a.heavy));
 }
-function brainStarterLine(pid){
-  const p=window._brain?.p?.[pid];if(!p)return null;const st=p.g.filter(r=>r[8]).slice(-3).reverse();if(!st.length)return null;
+function brainStarterLine(pid,date){
+  const p=window._brain?.p?.[pid];if(!p)return null;const st=p.g.filter(r=>r[8]&&(!date||r[0]<date)).slice(-3).reverse();if(!st.length)return null;
   return st.map(r=>`${_mdTxt(r[0])} ${_ipTxt(r[1])}局${r[2]}失`).join('、');
 }
 function applyBrain(){
@@ -3278,7 +3278,7 @@ function applyBrain(){
     const bpA=brainBullpen(aw,d),bpH=brainBullpen(hm,d);
     const fmt=(team,list)=>list.length?`${team} 牛棚:${list.slice(0,4).map(x=>`<span class="pnm" data-pid="${x.pid}" style="cursor:pointer">${esc(x.name)}</span>${x.heavy?'⚠':''} ${esc(x.tag)}`).join('、')}${list.length>4?` 等 ${list.length} 人`:''}`:null;
     [fmt(aw,bpA),fmt(hm,bpH)].filter(Boolean).forEach(t=>parts.push(t));
-    const sa=el.dataset.ap&&brainStarterLine(+el.dataset.ap),sh=el.dataset.hp&&brainStarterLine(+el.dataset.hp);
+    const sa=el.dataset.ap&&brainStarterLine(+el.dataset.ap,d),sh=el.dataset.hp&&brainStarterLine(+el.dataset.hp,d);
     if(sa||sh)parts.push(`先發近況:${[sa?`${esc(brainName(el.dataset.ap)||'客隊先發')} ${sa}`:null,sh?`${esc(brainName(el.dataset.hp)||'主隊先發')} ${sh}`:null].filter(Boolean).join(';')}`);
     const heavy=[...bpA,...bpH].filter(x=>x.heavy).length;
     if(heavy)parts.push(`⚠ 標記者今日可能不出賽或狀態下滑;2026 回測顯示此訊號對牛棚失分無穩定影響,僅供參考、未納入計算。`);
