@@ -1,0 +1,34 @@
+name: 多季完整比賽紀錄抓取
+
+on:
+  workflow_dispatch:
+    inputs:
+      seasons:
+        description: '要抓的球季(逗號分隔)'
+        default: '2026'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  history:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 抓取
+        env:
+          SEASONS: ${{ github.event.inputs.seasons }}
+        run: node scripts/history.js
+      - name: 提交結果
+        run: |
+          git config user.name "calib-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add box.json
+          git add box-*.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "多季完整紀錄 ${{ github.event.inputs.seasons }} $(date -u +%F)"
+          git pull --rebase origin main || true
+          git push
